@@ -1,13 +1,13 @@
-# Premium Peptides - E-commerce Platform
+# Peptivate.ph - Premium Peptide E-commerce Platform
 
 A modern, professional e-commerce platform for selling research-grade peptides. Built with React, TypeScript, Vite, and Supabase.
 
 ## 🎨 Design Theme
 
-- **Primary Colors:** Blue (#2563eb) and White (#ffffff)
-- **Accent Colors:** Cyan (#06b6d4) and Sky Blue (#0ea5e9)
+- **Primary Colors:** Dark Blue (#2563eb), Light Blue (#60a5fa), and White (#ffffff)
+- **Accent Colors:** Indigo (#6366f1) and Sky Blue (#0ea5e9)
 - **Typography:** Inter font family for clean, professional look
-- **Style:** Medical/pharmaceutical aesthetic with modern UI/UX
+- **Style:** Professional medical/pharmaceutical aesthetic with corporate blue theme
 
 ## 🧪 Features
 
@@ -329,3 +329,4 @@ For technical support or questions:
 # kaedraa4
 # peptide-kaedra
 # putangina-gumana-ka-na
+# peptivate
