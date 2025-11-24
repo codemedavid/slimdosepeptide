@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { ArrowLeft, ShieldCheck, Package, CreditCard, Sparkles, Heart, Copy, Check, MessageCircle } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { ArrowLeft, ShieldCheck, Package, CreditCard, Sparkles, Heart, Copy, Check, MessageCircle, Upload, X, Image as ImageIcon, Instagram, Phone } from 'lucide-react';
 import type { CartItem } from '../types';
 import { usePaymentMethods } from '../hooks/usePaymentMethods';
+import { useImageUpload } from '../hooks/useImageUpload';
 import { supabase } from '../lib/supabase';
 
 interface CheckoutProps {
@@ -12,7 +13,9 @@ interface CheckoutProps {
 
 const Checkout: React.FC<CheckoutProps> = ({ cartItems, totalPrice, onBack }) => {
   const { paymentMethods } = usePaymentMethods();
+  const { uploadImage, uploading: uploadingProof } = useImageUpload('payment-proofs');
   const [step, setStep] = useState<'details' | 'payment' | 'confirmation'>('details');
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Customer Details
   const [fullName, setFullName] = useState('');
@@ -25,15 +28,18 @@ const Checkout: React.FC<CheckoutProps> = ({ cartItems, totalPrice, onBack }) =>
   const [state, setState] = useState('');
   const [zipCode, setZipCode] = useState('');
   const [country, setCountry] = useState('');
+  const [shippingLocation, setShippingLocation] = useState<'NCR' | 'LUZON' | 'VISAYAS_MINDANAO' | ''>('');
   
   // Payment
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('');
+  const [paymentProofUrl, setPaymentProofUrl] = useState<string | undefined>(undefined);
+  const [contactMethod, setContactMethod] = useState<'instagram' | 'viber' | ''>('');
   const [notes, setNotes] = useState('');
   
   // Order message for copying
   const [orderMessage, setOrderMessage] = useState<string>('');
   const [copied, setCopied] = useState(false);
-  const [messengerOpened, setMessengerOpened] = useState(false);
+  const [contactOpened, setContactOpened] = useState(false);
 
   React.useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -45,8 +51,35 @@ const Checkout: React.FC<CheckoutProps> = ({ cartItems, totalPrice, onBack }) =>
     }
   }, [paymentMethods, selectedPaymentMethod]);
 
-  // Shipping fee will be discussed with buyer via chat
-  const finalTotal = totalPrice;
+  // Calculate shipping fee based on location
+  const calculateShippingFee = (): number => {
+    if (!shippingLocation) return 0;
+    
+    // Check if medium box applies (3+ peptide sets)
+    const totalPeptideSets = cartItems.reduce((sum, item) => {
+      // Count items that are peptide products (not syringes)
+      const isPeptide = !item.product.name.toLowerCase().includes('syringe');
+      return sum + (isPeptide ? item.quantity : 0);
+    }, 0);
+    
+    if (totalPeptideSets >= 3) {
+      return 220; // MEDIUM BOX
+    }
+    
+    switch (shippingLocation) {
+      case 'NCR':
+        return 160;
+      case 'LUZON':
+        return 165;
+      case 'VISAYAS_MINDANAO':
+        return 190;
+      default:
+        return 0;
+    }
+  };
+  
+  const shippingFee = calculateShippingFee();
+  const finalTotal = totalPrice + shippingFee;
 
   const isDetailsValid = 
     fullName.trim() !== '' &&
@@ -56,7 +89,8 @@ const Checkout: React.FC<CheckoutProps> = ({ cartItems, totalPrice, onBack }) =>
     city.trim() !== '' &&
     state.trim() !== '' &&
     zipCode.trim() !== '' &&
-    country.trim() !== '';
+    country.trim() !== '' &&
+    shippingLocation !== '';
 
   const handleProceedToPayment = () => {
     if (isDetailsValid) {
@@ -64,7 +98,43 @@ const Checkout: React.FC<CheckoutProps> = ({ cartItems, totalPrice, onBack }) =>
     }
   };
 
+  const handleProofUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const imageUrl = await uploadImage(file);
+      setPaymentProofUrl(imageUrl);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to upload proof of payment');
+    }
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveProof = () => {
+    setPaymentProofUrl(undefined);
+  };
+
   const handlePlaceOrder = async () => {
+    if (!paymentProofUrl) {
+      alert('Please upload proof of payment screenshot before proceeding.');
+      return;
+    }
+    
+    if (!contactMethod) {
+      alert('Please select your preferred contact method (Instagram or Viber).');
+      return;
+    }
+    
+    if (!shippingLocation) {
+      alert('Please select your shipping location.');
+      return;
+    }
+    
     const paymentMethod = paymentMethods.find(pm => pm.id === selectedPaymentMethod);
     
     try {
@@ -94,8 +164,12 @@ const Checkout: React.FC<CheckoutProps> = ({ cartItems, totalPrice, onBack }) =>
           shipping_country: country,
           order_items: orderItems,
           total_price: totalPrice,
+          shipping_fee: shippingFee,
+          shipping_location: shippingLocation,
           payment_method_id: paymentMethod?.id || null,
           payment_method_name: paymentMethod?.name || null,
+          payment_proof_url: paymentProofUrl || null,
+          contact_method: contactMethod || null,
           notes: notes.trim() || null,
           order_status: 'new',
           payment_status: 'pending'
@@ -119,6 +193,7 @@ const Checkout: React.FC<CheckoutProps> = ({ cartItems, totalPrice, onBack }) =>
       }
 
       console.log('✅ Order saved to database:', orderData);
+      console.log('📸 Payment proof URL:', paymentProofUrl); // Debug log
 
       // Get current date and time
       const now = new Date();
@@ -133,8 +208,12 @@ const Checkout: React.FC<CheckoutProps> = ({ cartItems, totalPrice, onBack }) =>
         hour12: true
       });
       
+      // Ensure payment proof URL is available
+      const proofUrl = paymentProofUrl || orderData.payment_proof_url || null;
+      console.log('🔍 Using payment proof URL:', proofUrl); // Debug log
+      
       const orderDetails = `
-🧪 Peptivate - NEW ORDER
+✨ HP GLOW - NEW ORDER
 
 📅 ORDER DATE & TIME
 ${dateTimeStamp}
@@ -162,11 +241,18 @@ ${cartItems.map(item => {
 
 💰 PRICING
 Product Total: ₱${totalPrice.toLocaleString('en-PH', { minimumFractionDigits: 0 })}
-Shipping Fee: To be discussed
+Shipping Fee: ₱${shippingFee.toLocaleString('en-PH', { minimumFractionDigits: 0 })} (${shippingLocation.replace('_', ' & ')})
+Grand Total: ₱${finalTotal.toLocaleString('en-PH', { minimumFractionDigits: 0 })}
 
 💳 PAYMENT METHOD
 ${paymentMethod?.name || 'N/A'}
 ${paymentMethod ? `Account: ${paymentMethod.account_number}` : ''}
+
+📸 PROOF OF PAYMENT
+${proofUrl ? `✅ Payment proof has been uploaded and is visible on this page.\nPlease attach the payment proof image when sending this message.` : '❌ Payment proof not provided - Please upload proof before placing order'}
+
+📱 CONTACT METHOD
+${contactMethod === 'instagram' ? 'Instagram: https://www.instagram.com/hpglowpeptides' : contactMethod === 'viber' ? 'Viber: 09062349763' : 'Not selected'}
 
 📋 ORDER ID: ${orderData.id}
 
@@ -176,30 +262,32 @@ Please confirm this order. Thank you!
       // Store order message for copying
       setOrderMessage(orderDetails);
 
-      // Send order to Facebook Messenger (pre-filled, customer still needs to send)
-      const encodedMessage = encodeURIComponent(orderDetails);
-      const messengerUrl = `https://m.me/renalyndv?text=${encodedMessage}`;
+      // Open contact method based on selection
+      const contactUrl = contactMethod === 'instagram' 
+        ? 'https://www.instagram.com/hpglowpeptides'
+        : contactMethod === 'viber'
+        ? 'viber://chat?number=09062349763'
+        : null;
       
-      // Try to open Facebook Messenger with better error handling
-      try {
-        const messengerWindow = window.open(messengerUrl, '_blank');
-        
-        // Check if popup was blocked
-        if (!messengerWindow || messengerWindow.closed || typeof messengerWindow.closed === 'undefined') {
-          console.warn('⚠️ Popup blocked or messenger failed to open');
-          setMessengerOpened(false);
-        } else {
-          setMessengerOpened(true);
-          // Check after a short delay if window is still open
-          setTimeout(() => {
-            if (messengerWindow.closed) {
-              setMessengerOpened(false);
-            }
-          }, 1000);
+      if (contactUrl) {
+        try {
+          const contactWindow = window.open(contactUrl, '_blank');
+          
+          if (!contactWindow || contactWindow.closed || typeof contactWindow.closed === 'undefined') {
+            console.warn('⚠️ Popup blocked or contact method failed to open');
+            setContactOpened(false);
+          } else {
+            setContactOpened(true);
+            setTimeout(() => {
+              if (contactWindow.closed) {
+                setContactOpened(false);
+              }
+            }, 1000);
+          }
+        } catch (error) {
+          console.error('❌ Error opening contact method:', error);
+          setContactOpened(false);
         }
-      } catch (error) {
-        console.error('❌ Error opening messenger:', error);
-        setMessengerOpened(false);
       }
       
       // Show confirmation
@@ -235,10 +323,16 @@ Please confirm this order. Thank you!
     }
   };
 
-  const handleOpenMessenger = () => {
-    const encodedMessage = encodeURIComponent(orderMessage);
-    const messengerUrl = `https://m.me/renalyndv?text=${encodedMessage}`;
-    window.open(messengerUrl, '_blank');
+  const handleOpenContact = () => {
+    const contactUrl = contactMethod === 'instagram' 
+      ? 'https://www.instagram.com/hpglowpeptides'
+      : contactMethod === 'viber'
+      ? 'viber://chat?number=09062349763'
+      : null;
+    
+    if (contactUrl) {
+      window.open(contactUrl, '_blank');
+    }
   };
 
   if (step === 'confirmation') {
@@ -255,22 +349,60 @@ Please confirm this order. Thank you!
             </h1>
             <p className="text-gray-600 mb-8 text-base md:text-lg leading-relaxed">
               ✅ Your order has been automatically saved to our system!
-              {messengerOpened ? (
+              {contactOpened ? (
                 <>
                   <br />
-                  Facebook Messenger has been opened with your order details. 
+                  {contactMethod === 'instagram' ? 'Instagram' : 'Viber'} has been opened. 
                   <Heart className="inline w-5 h-5 text-pink-500 mx-1" />
-                  Please send the message to complete your order.
+                  Please send the order message to complete your order.
                 </>
               ) : (
                 <>
                   <br />
-                  <span className="text-orange-600 font-semibold">⚠️ Messenger didn't open automatically.</span>
+                  <span className="text-orange-600 font-semibold">⚠️ Contact method didn't open automatically.</span>
                   <br />
-                  Use the buttons below to open Messenger or copy the message manually.
+                  Use the buttons below to open {contactMethod === 'instagram' ? 'Instagram' : 'Viber'} or copy the message manually.
                 </>
               )}
             </p>
+
+            {/* Payment Proof Image Display */}
+            {paymentProofUrl && (
+              <div className="bg-gradient-to-br from-green-50 to-blue-50 rounded-2xl p-6 mb-6 border-2 border-green-200">
+                <div className="mb-4 text-center">
+                  <h3 className="font-bold text-gray-900 flex items-center justify-center gap-2 mb-2">
+                    <ImageIcon className="w-5 h-5 text-green-600" />
+                    Your Payment Proof
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    📸 Screenshot this image and attach it when sending your order message
+                  </p>
+                </div>
+                <div className="bg-white rounded-lg p-4 border-2 border-green-300 shadow-lg">
+                  <img
+                    src={paymentProofUrl}
+                    alt="Payment Proof - Screenshot this image"
+                    className="w-full max-w-2xl mx-auto rounded-lg shadow-md object-contain cursor-pointer hover:opacity-95 transition-opacity"
+                    style={{ maxHeight: '600px', minHeight: '300px' }}
+                    onError={(e) => {
+                      console.error('❌ Error loading payment proof image:', paymentProofUrl);
+                      e.currentTarget.style.display = 'none';
+                      e.currentTarget.parentElement!.innerHTML = `
+                        <div class="p-8 text-center text-red-600">
+                          <p class="font-semibold">⚠️ Image failed to load</p>
+                          <p class="text-sm mt-2">Please check your internet connection or try uploading again.</p>
+                        </div>
+                      `;
+                    }}
+                  />
+                </div>
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-sm text-blue-800 text-center">
+                    💡 <strong>Tip:</strong> Take a screenshot of the image above, then attach it when sending your order message via {contactMethod === 'instagram' ? 'Instagram' : 'Viber'}.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Order Message Display */}
             <div className="bg-gray-50 rounded-2xl p-6 mb-6 text-left border-2 border-gray-200">
@@ -304,7 +436,7 @@ Please confirm this order. Thank you!
               {copied && (
                 <p className="text-green-600 text-sm mt-2 flex items-center gap-1">
                   <Check className="w-4 h-4" />
-                  Message copied to clipboard! You can now paste it in Messenger.
+                  Message copied to clipboard! Paste it in {contactMethod === 'instagram' ? 'Instagram' : 'Viber'} and attach the payment proof image above.
                 </p>
               )}
             </div>
@@ -312,16 +444,16 @@ Please confirm this order. Thank you!
             {/* Action Buttons */}
             <div className="space-y-3 mb-8">
               <button
-                onClick={handleOpenMessenger}
+                onClick={handleOpenContact}
                 className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white py-3 md:py-4 rounded-2xl font-bold text-base md:text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all flex items-center justify-center gap-2"
               >
-                <MessageCircle className="w-5 h-5" />
-                Open Facebook Messenger
+                {contactMethod === 'instagram' ? <Instagram className="w-5 h-5" /> : <Phone className="w-5 h-5" />}
+                Open {contactMethod === 'instagram' ? 'Instagram' : 'Viber'}
               </button>
               
-              {!messengerOpened && (
+              {!contactOpened && (
                 <p className="text-sm text-gray-600">
-                  💡 If Messenger doesn't open, copy the message above and paste it manually in Messenger
+                  💡 If {contactMethod === 'instagram' ? 'Instagram' : 'Viber'} doesn't open, copy the message above and paste it manually
                 </p>
               )}
             </div>
@@ -334,11 +466,11 @@ Please confirm this order. Thank you!
               <ul className="space-y-3 text-sm md:text-base text-gray-700">
                 <li className="flex items-start gap-3">
                   <span className="text-2xl">1️⃣</span>
-                  <span>Send the message in Facebook Messenger (copy it above if needed)</span>
+                  <span>Copy the order message above and attach the payment proof image (shown above) when sending via {contactMethod === 'instagram' ? 'Instagram' : 'Viber'}</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="text-2xl">2️⃣</span>
-                  <span>We'll confirm your order on Facebook Messenger within 24 hours</span>
+                  <span>We'll confirm your order on {contactMethod === 'instagram' ? 'Instagram' : 'Viber'} within 24 hours</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="text-2xl">3️⃣</span>
@@ -521,6 +653,56 @@ Please confirm this order. Thank you!
                 </div>
               </div>
 
+              {/* Shipping Location Selection */}
+              <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg p-5 md:p-6 border-2 border-purple-100">
+                <h2 className="text-lg md:text-xl font-bold text-gray-900 mb-4 md:mb-6 flex items-center gap-2">
+                  <Package className="w-5 h-5 md:w-6 md:h-6 text-purple-600" />
+                  Choose Shipping Location *
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <button
+                    onClick={() => setShippingLocation('NCR')}
+                    className={`p-3 rounded-lg border-2 transition-all ${
+                      shippingLocation === 'NCR'
+                        ? 'border-gold-500 bg-gold-50'
+                        : 'border-gray-200 hover:border-gold-300'
+                    }`}
+                  >
+                    <p className="font-semibold text-gray-900 text-sm">NCR</p>
+                    <p className="text-xs text-gray-500">₱160</p>
+                  </button>
+                  <button
+                    onClick={() => setShippingLocation('LUZON')}
+                    className={`p-3 rounded-lg border-2 transition-all ${
+                      shippingLocation === 'LUZON'
+                        ? 'border-gold-500 bg-gold-50'
+                        : 'border-gray-200 hover:border-gold-300'
+                    }`}
+                  >
+                    <p className="font-semibold text-gray-900 text-sm">LUZON</p>
+                    <p className="text-xs text-gray-500">₱165</p>
+                  </button>
+                  <button
+                    onClick={() => setShippingLocation('VISAYAS_MINDANAO')}
+                    className={`p-3 rounded-lg border-2 transition-all ${
+                      shippingLocation === 'VISAYAS_MINDANAO'
+                        ? 'border-gold-500 bg-gold-50'
+                        : 'border-gray-200 hover:border-gold-300'
+                    }`}
+                  >
+                    <p className="font-semibold text-gray-900 text-sm">VISAYAS & MINDANAO</p>
+                    <p className="text-xs text-gray-500">₱190</p>
+                  </button>
+                </div>
+                {cartItems.reduce((sum, item) => sum + (!item.product.name.toLowerCase().includes('syringe') ? item.quantity : 0), 0) >= 3 && (
+                  <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <p className="text-xs text-blue-800">
+                      <strong>Medium Box:</strong> ₱220 applies (3+ peptide sets)
+                    </p>
+                  </div>
+                )}
+              </div>
+
               <button
                 onClick={handleProceedToPayment}
                 disabled={!isDetailsValid}
@@ -571,7 +753,9 @@ Please confirm this order. Thank you!
                   </div>
                   <div className="flex justify-between text-gray-600 text-xs">
                     <span>Shipping</span>
-                    <span className="font-medium text-blue-600">To be discussed via chat</span>
+                    <span className="font-medium text-blue-600">
+                      {shippingLocation ? `₱${shippingFee.toLocaleString('en-PH', { minimumFractionDigits: 0 })}` : 'Select location'}
+                    </span>
                   </div>
                   <div className="border-t-2 border-gray-200 pt-3">
                     <div className="flex justify-between items-center">
@@ -580,7 +764,9 @@ Please confirm this order. Thank you!
                         ₱{finalTotal.toLocaleString('en-PH', { minimumFractionDigits: 0 })}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1 text-right italic">Shipping fee will be discussed via chat</p>
+                    {!shippingLocation && (
+                      <p className="text-xs text-red-500 mt-1 text-right">Please select shipping location</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -613,6 +799,77 @@ Please confirm this order. Thank you!
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 lg:gap-8">
           {/* Payment Form */}
           <div className="lg:col-span-2 space-y-4 md:space-y-6">
+            {/* Shipping Location Selection */}
+            <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg p-5 md:p-6 border-2 border-purple-100">
+              <h2 className="text-lg md:text-xl font-bold text-gray-900 mb-4 md:mb-6 flex items-center gap-2">
+                <Package className="w-5 h-5 md:w-6 md:h-6 text-purple-600" />
+                Choose Shipping Location *
+              </h2>
+              <div className="grid grid-cols-1 gap-3">
+                <button
+                  onClick={() => setShippingLocation('NCR')}
+                  className={`p-4 rounded-lg border-2 transition-all flex items-center justify-between ${
+                    shippingLocation === 'NCR'
+                      ? 'border-gold-500 bg-gold-50'
+                      : 'border-gray-200 hover:border-gold-300'
+                  }`}
+                >
+                  <div className="text-left">
+                    <p className="font-semibold text-gray-900">NCR</p>
+                    <p className="text-sm text-gray-500">₱160</p>
+                  </div>
+                  {shippingLocation === 'NCR' && (
+                    <div className="w-6 h-6 bg-gold-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs">✓</span>
+                    </div>
+                  )}
+                </button>
+                <button
+                  onClick={() => setShippingLocation('LUZON')}
+                  className={`p-4 rounded-lg border-2 transition-all flex items-center justify-between ${
+                    shippingLocation === 'LUZON'
+                      ? 'border-gold-500 bg-gold-50'
+                      : 'border-gray-200 hover:border-gold-300'
+                  }`}
+                >
+                  <div className="text-left">
+                    <p className="font-semibold text-gray-900">LUZON</p>
+                    <p className="text-sm text-gray-500">₱165</p>
+                  </div>
+                  {shippingLocation === 'LUZON' && (
+                    <div className="w-6 h-6 bg-gold-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs">✓</span>
+                    </div>
+                  )}
+                </button>
+                <button
+                  onClick={() => setShippingLocation('VISAYAS_MINDANAO')}
+                  className={`p-4 rounded-lg border-2 transition-all flex items-center justify-between ${
+                    shippingLocation === 'VISAYAS_MINDANAO'
+                      ? 'border-gold-500 bg-gold-50'
+                      : 'border-gray-200 hover:border-gold-300'
+                  }`}
+                >
+                  <div className="text-left">
+                    <p className="font-semibold text-gray-900">VISAYAS & MINDANAO</p>
+                    <p className="text-sm text-gray-500">₱190</p>
+                  </div>
+                  {shippingLocation === 'VISAYAS_MINDANAO' && (
+                    <div className="w-6 h-6 bg-gold-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs">✓</span>
+                    </div>
+                  )}
+                </button>
+              </div>
+              {cartItems.reduce((sum, item) => sum + (!item.product.name.toLowerCase().includes('syringe') ? item.quantity : 0), 0) >= 3 && (
+                <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-sm text-blue-800">
+                    <strong>Medium Box Fee:</strong> ₱220 applies for 3+ peptide sets
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* Payment Method Selection */}
             <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg p-5 md:p-6 border-2 border-green-100">
               <h2 className="text-lg md:text-xl font-bold text-gray-900 mb-4 md:mb-6 flex items-center gap-2">
@@ -676,6 +933,108 @@ Please confirm this order. Thank you!
               )}
             </div>
 
+            {/* Payment Proof Upload */}
+            <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg p-5 md:p-6 border-2 border-red-100">
+              <h2 className="text-lg md:text-xl font-bold text-gray-900 mb-4 md:mb-6 flex items-center gap-2">
+                <ImageIcon className="w-5 h-5 md:w-6 md:h-6 text-red-600" />
+                Upload Proof of Payment *
+              </h2>
+              {paymentProofUrl ? (
+                <div className="relative">
+                  <img
+                    src={paymentProofUrl}
+                    alt="Payment Proof"
+                    className="w-full max-w-md mx-auto object-contain rounded-lg border-2 border-gray-200 shadow-lg"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleRemoveProof}
+                    className="absolute top-2 right-2 p-2 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-lg transition-all"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-gray-300 rounded-lg p-8 flex flex-col items-center justify-center cursor-pointer hover:border-gold-400 hover:bg-gold-50/50 transition-all"
+                >
+                  {uploadingProof ? (
+                    <div className="text-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gold-600 mx-auto mb-2"></div>
+                      <p className="text-sm text-gray-600">Uploading...</p>
+                    </div>
+                  ) : (
+                    <>
+                      <Upload className="h-12 w-12 text-gray-400 mb-3" />
+                      <p className="text-sm font-medium text-gray-700 mb-1">Click to upload payment proof</p>
+                      <p className="text-xs text-gray-500">Screenshot of your payment transaction</p>
+                    </>
+                  )}
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleProofUpload}
+                className="hidden"
+                disabled={uploadingProof}
+              />
+            </div>
+
+            {/* Contact Method Selection */}
+            <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg p-5 md:p-6 border-2 border-pink-100">
+              <h2 className="text-lg md:text-xl font-bold text-gray-900 mb-4 md:mb-6 flex items-center gap-2">
+                <MessageCircle className="w-5 h-5 md:w-6 md:h-6 text-pink-600" />
+                Preferred Contact Method *
+              </h2>
+              <div className="grid grid-cols-1 gap-3">
+                <button
+                  onClick={() => setContactMethod('instagram')}
+                  className={`p-4 rounded-lg border-2 transition-all flex items-center justify-between ${
+                    contactMethod === 'instagram'
+                      ? 'border-pink-500 bg-pink-50'
+                      : 'border-gray-200 hover:border-pink-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Instagram className="w-6 h-6 text-pink-600" />
+                    <div className="text-left">
+                      <p className="font-semibold text-gray-900">Instagram</p>
+                      <p className="text-sm text-gray-500">@hpglowpeptides</p>
+                    </div>
+                  </div>
+                  {contactMethod === 'instagram' && (
+                    <div className="w-6 h-6 bg-pink-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs">✓</span>
+                    </div>
+                  )}
+                </button>
+                <button
+                  onClick={() => setContactMethod('viber')}
+                  className={`p-4 rounded-lg border-2 transition-all flex items-center justify-between ${
+                    contactMethod === 'viber'
+                      ? 'border-purple-500 bg-purple-50'
+                      : 'border-gray-200 hover:border-purple-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Phone className="w-6 h-6 text-purple-600" />
+                    <div className="text-left">
+                      <p className="font-semibold text-gray-900">Viber</p>
+                      <p className="text-sm text-gray-500">09062349763</p>
+                    </div>
+                  </div>
+                  {contactMethod === 'viber' && (
+                    <div className="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs">✓</span>
+                    </div>
+                  )}
+                </button>
+              </div>
+            </div>
+
             {/* Additional Notes */}
             <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg p-5 md:p-6 border-2 border-pink-100">
               <h2 className="text-lg md:text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
@@ -693,10 +1052,15 @@ Please confirm this order. Thank you!
 
             <button
               onClick={handlePlaceOrder}
-              className="w-full bg-gradient-to-r from-blue-600 via-blue-700 to-blue-800 hover:from-blue-700 hover:via-blue-800 hover:to-blue-900 text-white py-3 md:py-4 rounded-2xl font-bold text-base md:text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all flex items-center justify-center gap-2"
+              disabled={!paymentProofUrl || !contactMethod || !shippingLocation || uploadingProof}
+              className={`w-full py-3 md:py-4 rounded-2xl font-bold text-base md:text-lg shadow-lg transition-all flex items-center justify-center gap-2 ${
+                paymentProofUrl && contactMethod && shippingLocation && !uploadingProof
+                  ? 'bg-gradient-to-r from-blue-600 via-blue-700 to-blue-800 hover:from-blue-700 hover:via-blue-800 hover:to-blue-900 text-white hover:shadow-xl transform hover:scale-105'
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
             >
               <ShieldCheck className="w-5 h-5 md:w-6 md:h-6" />
-              Open Messenger to Send Order
+              {uploadingProof ? 'Uploading...' : 'Complete Order'}
             </button>
           </div>
 
@@ -728,7 +1092,9 @@ Please confirm this order. Thank you!
                 </div>
                 <div className="flex justify-between text-gray-600 text-xs">
                   <span>Shipping</span>
-                  <span className="font-medium text-blue-600">To be discussed via chat</span>
+                  <span className="font-medium text-blue-600">
+                    {shippingLocation ? `₱${shippingFee.toLocaleString('en-PH', { minimumFractionDigits: 0 })} (${shippingLocation.replace('_', ' & ')})` : 'Select location'}
+                  </span>
                 </div>
                 <div className="border-t-2 border-gray-200 pt-3">
                   <div className="flex justify-between items-center">
@@ -737,7 +1103,9 @@ Please confirm this order. Thank you!
                       ₱{finalTotal.toLocaleString('en-PH', { minimumFractionDigits: 0 })}
                     </span>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1 text-right italic">Shipping fee will be discussed via chat</p>
+                  {!shippingLocation && (
+                    <p className="text-xs text-red-500 mt-1 text-right">Please select shipping location</p>
+                  )}
                 </div>
               </div>
             </div>

@@ -144,15 +144,11 @@ const SiteSettingsManager: React.FC = () => {
           </label>
           <div className="flex items-center space-x-4">
             <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
-              {logoPreview ? (
-                <img
-                  src={logoPreview}
-                  alt="Site Logo"
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="text-2xl text-gray-400">☕</div>
-              )}
+              <img
+                src={logoPreview || '/logo.jpg'}
+                alt="Site Logo"
+                className="w-full h-full object-cover"
+              />
             </div>
             {isEditing && (
               <div>

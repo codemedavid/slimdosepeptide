@@ -35,7 +35,7 @@ function MainApp() {
     : menuItems.filter(item => item.category === selectedCategory);
 
   return (
-    <div className="min-h-screen bg-gray-50 font-inter flex flex-col">
+    <div className="min-h-screen bg-white font-inter flex flex-col">
       <Header 
         cartItemsCount={cart.getTotalItems()}
         onCartClick={() => handleViewChange('cart')}

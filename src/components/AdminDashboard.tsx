@@ -336,7 +336,7 @@ const AdminDashboard: React.FC = () => {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === 'Peptivate@Admin!2025') {
+    if (password === 'HPGLOW@Admin!2025') {
       setIsAuthenticated(true);
       localStorage.setItem('peptide_admin_auth', 'true');
       setLoginError('');
@@ -367,7 +367,7 @@ const AdminDashboard: React.FC = () => {
             <div className="relative mx-auto w-16 h-16 md:w-20 md:h-20 bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl md:rounded-2xl flex items-center justify-center mb-4 md:mb-6 shadow-xl overflow-hidden border-2 border-white">
               <img 
                 src="/logo.jpg" 
-                alt="Peptivate.ph" 
+                alt="HP GLOW" 
                 className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
@@ -1095,13 +1095,13 @@ const AdminDashboard: React.FC = () => {
               <div className="w-8 h-8 md:w-10 md:h-10 bg-gradient-to-br from-blue-600 to-blue-800 rounded-lg md:rounded-xl flex items-center justify-center shadow-lg overflow-hidden border-2 border-white">
                 <img 
                   src="/logo.jpg" 
-                  alt="Peptivate.ph" 
+                  alt="HP GLOW" 
                   className="w-full h-full object-cover"
                 />
               </div>
               <div>
                 <h1 className="text-sm md:text-xl lg:text-2xl font-bold bg-gradient-to-r from-blue-600 via-blue-700 to-blue-900 bg-clip-text text-transparent">
-                  Peptivate.ph
+                  HP GLOW
                 </h1>
                 <p className="text-[10px] md:text-xs text-gray-600 font-medium flex items-center gap-1">
                   <Sparkles className="w-2 h-2 md:w-3 md:h-3 text-blue-500" />

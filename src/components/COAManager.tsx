@@ -33,7 +33,7 @@ const COAManager: React.FC = () => {
     verification_key: '',
     image_url: '/coa/',
     featured: false,
-    manufacturer: 'Peptivate.ph',
+    manufacturer: 'HP GLOW',
     laboratory: 'Janoshik Analytical',
   });
 
@@ -138,7 +138,7 @@ const COAManager: React.FC = () => {
       verification_key: '',
       image_url: '/coa/',
       featured: false,
-      manufacturer: 'Peptivate.ph',
+      manufacturer: 'HP GLOW',
       laboratory: 'Janoshik Analytical',
     });
   };

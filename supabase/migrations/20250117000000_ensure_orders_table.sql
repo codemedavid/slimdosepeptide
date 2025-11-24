@@ -1,5 +1,6 @@
 -- Ensure orders table exists (re-run if needed)
 -- This migration ensures the orders table is created even if the previous migration wasn't applied
+-- Updated to include shipping fee, shipping location, payment proof, and contact method
 
 CREATE TABLE IF NOT EXISTS orders (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -16,6 +17,10 @@ CREATE TABLE IF NOT EXISTS orders (
   shipping_zip_code TEXT NOT NULL,
   shipping_country TEXT NOT NULL,
   
+  -- Shipping Details
+  shipping_location TEXT, -- NCR, LUZON, VISAYAS_MINDANAO
+  shipping_fee DECIMAL(10,2) DEFAULT 0, -- Shipping fee amount
+  
   -- Order Details
   order_items JSONB NOT NULL, -- Array of {product_id, product_name, variation_id, variation_name, quantity, price}
   total_price DECIMAL(10,2) NOT NULL,
@@ -23,7 +28,11 @@ CREATE TABLE IF NOT EXISTS orders (
   -- Payment
   payment_method_id TEXT,
   payment_method_name TEXT,
+  payment_proof_url TEXT, -- URL to uploaded payment proof screenshot
   payment_status TEXT DEFAULT 'pending', -- pending, paid, failed
+  
+  -- Contact Method
+  contact_method TEXT, -- instagram, viber
   
   -- Order Status
   order_status TEXT DEFAULT 'new', -- new, confirmed, processing, shipped, delivered, cancelled
@@ -33,6 +42,42 @@ CREATE TABLE IF NOT EXISTS orders (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Add new columns to existing table if they don't exist (for existing installations)
+DO $$ 
+BEGIN
+  -- Add shipping_location column if it doesn't exist
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'orders' AND column_name = 'shipping_location'
+  ) THEN
+    ALTER TABLE orders ADD COLUMN shipping_location TEXT;
+  END IF;
+  
+  -- Add shipping_fee column if it doesn't exist
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'orders' AND column_name = 'shipping_fee'
+  ) THEN
+    ALTER TABLE orders ADD COLUMN shipping_fee DECIMAL(10,2) DEFAULT 0;
+  END IF;
+  
+  -- Add payment_proof_url column if it doesn't exist
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'orders' AND column_name = 'payment_proof_url'
+  ) THEN
+    ALTER TABLE orders ADD COLUMN payment_proof_url TEXT;
+  END IF;
+  
+  -- Add contact_method column if it doesn't exist
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'orders' AND column_name = 'contact_method'
+  ) THEN
+    ALTER TABLE orders ADD COLUMN contact_method TEXT;
+  END IF;
+END $$;
 
 -- Create indexes for better query performance (only if they don't exist)
 CREATE INDEX IF NOT EXISTS idx_orders_customer_email ON orders(customer_email);
