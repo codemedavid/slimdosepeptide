@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import {
     ChevronLeft,
-    Calendar,
     RefreshCw,
     TrendingUp,
     TrendingDown,
@@ -65,7 +64,7 @@ const formatTimeAgo = (dateString: string) => {
 };
 
 const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({ onBack }) => {
-    const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
+    const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly' | 'all'>('all');
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [metrics, setMetrics] = useState<{ current: DashboardMetrics; previous: DashboardMetrics | null }>({
@@ -86,7 +85,12 @@ const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({ onBack })
             let previousStartDate = new Date();
             let previousEndDate = new Date();
 
-            if (timeframe === 'daily') {
+            if (timeframe === 'all') {
+                // All time - use a very old date as start
+                startDate = new Date('2020-01-01');
+                previousStartDate = new Date('2019-01-01');
+                previousEndDate = new Date('2019-12-31');
+            } else if (timeframe === 'daily') {
                 startDate.setHours(0, 0, 0, 0);
                 previousStartDate.setDate(previousStartDate.getDate() - 1);
                 previousStartDate.setHours(0, 0, 0, 0);
@@ -217,9 +221,9 @@ const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({ onBack })
                             <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
                         </button>
                         <div className="flex bg-white rounded-xl p-1 border border-gray-200 shadow-sm">
-                            {(['daily', 'weekly', 'monthly'] as const).map((t) => (
-                                <button key={t} onClick={() => setTimeframe(t)} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${timeframe === t ? 'bg-navy-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-50'}`}>
-                                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                            {(['all', 'daily', 'weekly', 'monthly'] as const).map((t) => (
+                                <button key={t} onClick={() => setTimeframe(t)} className={`px-3 py-2 rounded-lg text-sm font-semibold transition-all ${timeframe === t ? 'bg-navy-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-50'}`}>
+                                    {t === 'all' ? 'All Time' : t.charAt(0).toUpperCase() + t.slice(1)}
                                 </button>
                             ))}
                         </div>
@@ -246,7 +250,7 @@ const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({ onBack })
                                 </div>
                                 <div>
                                     <h2 className="text-lg font-bold text-navy-900">Top Selling Products</h2>
-                                    <p className="text-xs text-gray-500">Best performers this {timeframe === 'daily' ? 'day' : timeframe === 'weekly' ? 'week' : 'month'}</p>
+                                    <p className="text-xs text-gray-500">Best performers {timeframe === 'all' ? 'of all time' : timeframe === 'daily' ? 'today' : timeframe === 'weekly' ? 'this week' : 'this month'}</p>
                                 </div>
                             </div>
                             <div className="flex bg-gray-100 rounded-lg p-1">

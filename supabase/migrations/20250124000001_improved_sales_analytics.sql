@@ -1,4 +1,5 @@
 -- Improved Sales Analytics with Flexible Date Ranges
+-- Updated: Fixed to include shipping_fee and align with inventory manager logic
 
 -- 1. Get Dashboard Metrics (Revenue, Orders, Units, AOV)
 -- Allows strict date ranges for accurate "vs previous" comparisons
@@ -16,19 +17,20 @@ declare
   total_units bigint;
   avg_order_value decimal(10,2);
 begin
-  -- Calculate core metrics
+  -- Calculate core metrics (only confirmed/paid orders for accurate revenue)
   select 
     count(distinct id),
-    coalesce(sum(case when payment_status = 'paid' then total_price else 0 end), 0)
+    coalesce(sum(total_price + coalesce(shipping_fee, 0)), 0)
   into 
     total_orders,
     total_revenue
   from orders
   where created_at >= date_start 
   and created_at <= date_end
-  and order_status != 'cancelled';
+  and order_status in ('confirmed', 'processing', 'shipped', 'delivered')
+  and payment_status = 'paid';
 
-  -- Calculate total units sold
+  -- Calculate total units sold (from paid/confirmed orders)
   select 
     coalesce(sum((item->>'quantity')::int), 0)
   into 
@@ -37,7 +39,8 @@ begin
   jsonb_array_elements(order_items) as item
   where created_at >= date_start 
   and created_at <= date_end
-  and order_status != 'cancelled';
+  and order_status in ('confirmed', 'processing', 'shipped', 'delivered')
+  and payment_status = 'paid';
 
   -- Calculate AOV
   if total_orders > 0 then
@@ -81,7 +84,8 @@ begin
     jsonb_array_elements(order_items) as item
     where created_at >= date_start 
     and created_at <= date_end
-    and order_status != 'cancelled'
+    and order_status in ('confirmed', 'processing', 'shipped', 'delivered')
+    and payment_status = 'paid'
   )
   select
     p_name,
