@@ -718,27 +718,52 @@ Please confirm this order. Thank you!
                 </h2>
 
                 <div className="space-y-4 mb-6">
-                  {cartItems.map((item, index) => (
-                    <div key={index} className="pb-4 border-b border-gray-200">
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-navy-900 text-sm">{item.product.name}</h4>
-                          {item.variation && (
-                            <p className="text-xs text-gold-600 mt-1">{item.variation.name}</p>
-                          )}
-                          {item.product.purity_percentage && item.product.purity_percentage > 0 ? (
-                            <p className="text-xs text-gray-500 mt-1">
-                              {item.product.purity_percentage}% Purity
-                            </p>
-                          ) : null}
+                  {cartItems.map((item, index) => {
+                    // Determine if this item has a product-level discount
+                    const hasVariation = !!item.variation;
+                    const originalPrice = hasVariation
+                      ? item.variation!.price * item.quantity
+                      : item.product.base_price * item.quantity;
+                    const currentPrice = item.price * item.quantity;
+                    const hasProductDiscount = hasVariation
+                      ? (item.variation!.discount_active && item.variation!.discount_price !== null)
+                      : (item.product.discount_active && item.product.discount_price !== null);
+                    const savedAmount = originalPrice - currentPrice;
+
+                    return (
+                      <div key={index} className="pb-4 border-b border-gray-200">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-navy-900 text-sm">{item.product.name}</h4>
+                            {item.variation && (
+                              <p className="text-xs text-gold-600 mt-1">{item.variation.name}</p>
+                            )}
+                            {item.product.purity_percentage && item.product.purity_percentage > 0 ? (
+                              <p className="text-xs text-gray-500 mt-1">
+                                {item.product.purity_percentage}% Purity
+                              </p>
+                            ) : null}
+                          </div>
+                          <div className="text-right">
+                            <span className="font-semibold text-navy-900 text-sm">
+                              ₱{currentPrice.toLocaleString('en-PH', { minimumFractionDigits: 0 })}
+                            </span>
+                            {hasProductDiscount && savedAmount > 0 && (
+                              <div className="flex flex-col items-end">
+                                <span className="text-xs text-gray-400 line-through">
+                                  ₱{originalPrice.toLocaleString('en-PH', { minimumFractionDigits: 0 })}
+                                </span>
+                                <span className="text-xs text-green-600 font-medium">
+                                  Save ₱{savedAmount.toLocaleString('en-PH', { minimumFractionDigits: 0 })}
+                                </span>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <span className="font-semibold text-navy-900 text-sm">
-                          ₱{(item.price * item.quantity).toLocaleString('en-PH', { minimumFractionDigits: 0 })}
-                        </span>
+                        <p className="text-xs text-gray-500">Qty: {item.quantity}</p>
                       </div>
-                      <p className="text-xs text-gray-500">Qty: {item.quantity}</p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 <div className="space-y-4 mb-6">
@@ -1116,7 +1141,7 @@ Please confirm this order. Thank you!
               </h2>
 
               {/* Customer Info */}
-              <div className="bg-gray-50 rounded-lg p-4 mb-6 text-sm">
+              <div className="bg-gray-50 rounded-lg p-4 mb-4 text-sm">
                 <p className="font-semibold text-navy-900 mb-2">{fullName}</p>
                 <p className="text-gray-600">{email}</p>
                 <p className="text-gray-600">{phone}</p>
@@ -1125,6 +1150,50 @@ Please confirm this order. Thank you!
                   <p>{barangay}</p>
                   <p>{city}, {state} {zipCode}</p>
                 </div>
+              </div>
+
+              {/* Order Items */}
+              <div className="space-y-3 mb-4 max-h-48 overflow-y-auto">
+                {cartItems.map((item, index) => {
+                  const hasVariation = !!item.variation;
+                  const originalPrice = hasVariation
+                    ? item.variation!.price * item.quantity
+                    : item.product.base_price * item.quantity;
+                  const currentPrice = item.price * item.quantity;
+                  const hasProductDiscount = hasVariation
+                    ? (item.variation!.discount_active && item.variation!.discount_price !== null)
+                    : (item.product.discount_active && item.product.discount_price !== null);
+                  const savedAmount = originalPrice - currentPrice;
+
+                  return (
+                    <div key={index} className="pb-3 border-b border-gray-100 last:border-0">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1 pr-2">
+                          <p className="font-medium text-navy-900 text-xs">{item.product.name}</p>
+                          {item.variation && (
+                            <p className="text-xs text-gold-600">{item.variation.name}</p>
+                          )}
+                          <p className="text-xs text-gray-400">Qty: {item.quantity}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-semibold text-navy-900 text-xs">
+                            ₱{currentPrice.toLocaleString('en-PH', { minimumFractionDigits: 0 })}
+                          </span>
+                          {hasProductDiscount && savedAmount > 0 && (
+                            <div className="flex flex-col items-end">
+                              <span className="text-xs text-gray-400 line-through">
+                                ₱{originalPrice.toLocaleString('en-PH', { minimumFractionDigits: 0 })}
+                              </span>
+                              <span className="text-xs text-green-600">
+                                -₱{savedAmount.toLocaleString('en-PH', { minimumFractionDigits: 0 })}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Pricing */}
