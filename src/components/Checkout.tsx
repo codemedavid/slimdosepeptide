@@ -325,7 +325,7 @@ ${paymentMethod ? `Account: ${paymentMethod.account_number}` : ''}
 ${paymentProofUrl ? 'Screenshot attached to order.' : 'Pending'}
 
 📱 CONTACT METHOD
-Messenger: https://m.me/SlimDosePeptides
+Messenger: https://www.facebook.com/messages/t/61555961135365
 
 📋 ORDER ID: ${orderData.id}
 
@@ -346,7 +346,7 @@ Please confirm this order. Thank you!
       // Open contact method based on selection
       // Using m.me link with Page ID to open Messenger directly
       const contactUrl = contactMethod === 'messenger'
-        ? `https://m.me/61555961135365?text=${encodeURIComponent(orderDetails)}`
+        ? `https://www.facebook.com/messages/t/61555961135365?text=${encodeURIComponent(orderDetails)}`
         : null;
 
       if (contactUrl) {
@@ -402,7 +402,7 @@ Please confirm this order. Thank you!
 
   const handleOpenContact = () => {
     const contactUrl = contactMethod === 'messenger'
-      ? `https://m.me/61555961135365?text=${encodeURIComponent(orderMessage)}`
+      ? `https://www.facebook.com/messages/t/61555961135365?text=${encodeURIComponent(orderMessage)}`
       : null;
 
     if (contactUrl) {
@@ -501,6 +501,12 @@ Please confirm this order. Thank you!
                 <li className="flex items-start gap-3">
                   <span className="text-2xl">4️⃣</span>
                   <span>Tracking numbers are sent via Messenger from 11 PM onwards.</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="text-2xl">5️⃣</span>
+                  <span>
+                    You can check your order status anytime on our <a href="/track-order" target="_blank" className="text-blue-600 hover:underline font-bold">Track Order page</a> using your Order ID.
+                  </span>
                 </li>
               </ul>
             </div>
