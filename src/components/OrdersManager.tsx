@@ -632,7 +632,7 @@ const OrderDetailsView: React.FC<OrderDetailsViewProps> = ({
               {order.contact_method && (
                 <p className="flex items-center gap-2 flex-wrap">
                   <span className="font-semibold">Contact Method:</span>
-                  <span className="flex items-center gap-1 text-green-600"><MessageCircle className="w-3 h-3 md:w-4 md:h-4" /> WhatsApp</span>
+                  <span className="flex items-center gap-1 text-blue-500"><MessageCircle className="w-3 h-3 md:w-4 md:h-4" /> Telegram</span>
                 </p>
               )}
             </div>

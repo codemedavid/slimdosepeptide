@@ -170,7 +170,7 @@ const Checkout: React.FC<CheckoutProps> = ({ cartItems, totalPrice, onBack }) =>
 
   const handlePlaceOrder = async () => {
     if (!contactMethod) {
-      alert('Please select your preferred contact method (Messenger).');
+      alert('Please select your preferred contact method (Telegram).');
       return;
     }
 
@@ -325,7 +325,7 @@ ${paymentMethod ? `Account: ${paymentMethod.account_number}` : ''}
 ${paymentProofUrl ? 'Screenshot attached to order.' : 'Pending'}
 
 📱 CONTACT METHOD
-Messenger: https://www.facebook.com/messages/t/61555961135365
+Telegram: https://t.me/slimdosedvo
 
 📋 ORDER ID: ${orderData.id}
 
@@ -346,7 +346,7 @@ Please confirm this order. Thank you!
       // Open contact method based on selection
       // Using m.me link with Page ID to open Messenger directly
       const contactUrl = contactMethod === 'messenger'
-        ? `https://www.facebook.com/messages/t/61555961135365?text=${encodeURIComponent(orderDetails)}`
+        ? `https://t.me/slimdosedvo`
         : null;
 
       if (contactUrl) {
@@ -402,7 +402,7 @@ Please confirm this order. Thank you!
 
   const handleOpenContact = () => {
     const contactUrl = contactMethod === 'messenger'
-      ? `https://www.facebook.com/messages/t/61555961135365?text=${encodeURIComponent(orderMessage)}`
+      ? `https://t.me/slimdosedvo`
       : null;
 
     if (contactUrl) {
@@ -423,7 +423,7 @@ Please confirm this order. Thank you!
               <Sparkles className="w-7 h-7 text-gold-600" />
             </h1>
             <p className="text-gray-600 mb-8 text-base md:text-lg leading-relaxed">
-              Copy the order message below and send it via Messenger along with your payment screenshot.
+              Copy the order message below and send it via Telegram along with your payment screenshot.
             </p>
 
             {/* Order Message Display */}
@@ -458,7 +458,7 @@ Please confirm this order. Thank you!
               {copied && (
                 <p className="text-green-600 text-sm mt-2 flex items-center gap-1">
                   <Check className="w-4 h-4" />
-                  Message copied to clipboard! Paste it in Messenger along with your payment screenshot.
+                  Message copied to clipboard! Paste it in Telegram along with your payment screenshot.
                 </p>
               )}
             </div>
@@ -470,12 +470,12 @@ Please confirm this order. Thank you!
                 className="w-full bg-navy-900 hover:bg-navy-800 text-white py-3 md:py-4 rounded-2xl font-bold text-base md:text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all flex items-center justify-center gap-2 border border-navy-900/20"
               >
                 <MessageCircle className="w-5 h-5" />
-                Open Messenger
+                Open Telegram
               </button>
 
               {!contactOpened && (
                 <p className="text-sm text-gray-600">
-                  💡 If Messenger doesn't open, copy the message above and visit our page manually
+                  💡 If Telegram doesn't open, copy the message above and visit our page manually
                 </p>
               )}
             </div>
@@ -500,7 +500,7 @@ Please confirm this order. Thank you!
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="text-2xl">4️⃣</span>
-                  <span>Tracking numbers are sent via Messenger from 11 PM onwards.</span>
+                  <span>Tracking numbers are sent via Telegram from 11 PM onwards.</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="text-2xl">5️⃣</span>
@@ -1030,8 +1030,8 @@ Please confirm this order. Thank you!
                   <div className="flex items-center gap-3">
                     <MessageCircle className="w-6 h-6 text-gold-600" />
                     <div className="text-left">
-                      <p className="font-semibold text-navy-900">Messenger</p>
-                      <p className="text-sm text-gray-500">SlimDose Peptides</p>
+                      <p className="font-semibold text-navy-900">Telegram</p>
+                      <p className="text-sm text-gray-500">@slimdosedvo</p>
                     </div>
                   </div>
                   {contactMethod === 'messenger' && (

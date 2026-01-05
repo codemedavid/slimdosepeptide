@@ -37,7 +37,7 @@ const FAQ: React.FC = () => {
         ? faqs.filter(faq => faq.category === activeCategory)
         : faqs;
 
-    const whatsappUrl = `https://wa.me/639062349763?text=${encodeURIComponent('Hi! I have a question about your products.')}`;
+    const telegramUrl = `https://t.me/slimdosedvo`;
 
     if (loading) {
         return (
@@ -148,16 +148,16 @@ const FAQ: React.FC = () => {
                         Still have questions?
                     </h3>
                     <p className="text-gray-600 mb-6">
-                        We're here to help! Reach out to us via WhatsApp for quick assistance.
+                        We're here to help! Reach out to us via Telegram for quick assistance.
                     </p>
                     <a
-                        href={whatsappUrl}
+                        href={telegramUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-2 bg-navy-900 text-white px-6 py-3 rounded-lg font-medium hover:bg-navy-800 transition-colors shadow-md hover:shadow-lg"
                     >
                         <MessageCircle className="w-5 h-5 text-gold-400" />
-                        Chat on WhatsApp
+                        Chat on Telegram
                     </a>
                 </div>
             </div>
