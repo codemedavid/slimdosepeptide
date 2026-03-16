@@ -86,7 +86,7 @@ export function useCart() {
     return () => window.removeEventListener('addToCart', handleAddToCartEvent as EventListener);
   }, []);
 
-  const addToCart = (product: Product, variation?: ProductVariation, quantity: number = 1) => {
+  const addToCart = (product: Product, variation?: ProductVariation, quantity: number = 1, priceOverride?: number) => {
     // Check stock availability
     const availableStock = variation ? variation.stock_quantity : product.stock_quantity;
 
@@ -96,9 +96,10 @@ export function useCart() {
     }
 
     // Calculate price considering discounts for both variations and products
-    const price = variation
+    // priceOverride is used when global discount has been pre-calculated
+    const price = priceOverride ?? (variation
       ? (variation.discount_active && variation.discount_price ? variation.discount_price : variation.price)
-      : (product.discount_active && product.discount_price ? product.discount_price : product.base_price);
+      : (product.discount_active && product.discount_price ? product.discount_price : product.base_price));
 
     const existingItemIndex = cartItems.findIndex(
       item => item.product.id === product.id &&

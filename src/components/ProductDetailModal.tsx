@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { X, Package, Beaker, ShoppingCart, Plus, Minus, Sparkles } from 'lucide-react';
-import type { Product, ProductVariation } from '../types';
+import type { Product, ProductVariation, GlobalDiscount } from '../types';
 
 interface ProductDetailModalProps {
   product: Product;
   onClose: () => void;
-  onAddToCart: (product: Product, variation: ProductVariation | undefined, quantity: number) => void;
+  onAddToCart: (product: Product, variation: ProductVariation | undefined, quantity: number, priceOverride?: number) => void;
+  globalDiscount?: GlobalDiscount | null;
+  getDiscountedPrice?: (originalPrice: number, productId: string) => { price: number; hasGlobalDiscount: boolean };
 }
 
-const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product, onClose, onAddToCart }) => {
+const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product, onClose, onAddToCart, globalDiscount, getDiscountedPrice }) => {
   // Select first available variation, or first variation if all are out of stock
   const getFirstAvailableVariation = () => {
     if (!product.variations || product.variations.length === 0) return undefined;
@@ -21,8 +23,16 @@ const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product, onClos
   );
   const [quantity, setQuantity] = useState(1);
 
-  const hasDiscount = product.discount_active && product.discount_price;
-  const currentPrice = selectedVariation?.price || (hasDiscount ? product.discount_price! : product.base_price);
+  const hasIndividualDiscount = product.discount_active && product.discount_price;
+  const basePrice = selectedVariation?.price || (hasIndividualDiscount ? product.discount_price! : product.base_price);
+
+  // Apply global discount if no individual discount
+  const globalResult = (!hasIndividualDiscount && getDiscountedPrice)
+    ? getDiscountedPrice(selectedVariation?.price || product.base_price, product.id)
+    : { price: basePrice, hasGlobalDiscount: false };
+
+  const currentPrice = globalResult.hasGlobalDiscount ? globalResult.price : basePrice;
+  const hasDiscount = hasIndividualDiscount || globalResult.hasGlobalDiscount;
   const showPurity = Boolean(product.purity_percentage);
 
   // Check if product has any available stock
@@ -34,7 +44,8 @@ const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product, onClos
   const decrementQuantity = () => setQuantity(prev => prev > 1 ? prev - 1 : 1);
 
   const handleAddToCart = () => {
-    onAddToCart(product, selectedVariation, quantity);
+    const priceToUse = globalResult.hasGlobalDiscount ? currentPrice : undefined;
+    onAddToCart(product, selectedVariation, quantity, priceToUse);
     onClose();
   };
 
@@ -159,10 +170,10 @@ const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product, onClos
                       {/* Original Price - Strikethrough */}
                       <div className="flex items-center justify-center gap-2 mb-1">
                         <span className="text-base sm:text-lg md:text-xl lg:text-2xl text-gray-400 line-through font-medium">
-                          ₱{product.base_price.toLocaleString('en-PH', { minimumFractionDigits: 0 })}
+                          ₱{(selectedVariation?.price || product.base_price).toLocaleString('en-PH', { minimumFractionDigits: 0 })}
                         </span>
                         <span className="text-xs sm:text-sm font-bold text-red-600 bg-red-50 px-2 py-1 rounded">
-                          {Math.round((1 - product.discount_price! / product.base_price) * 100)}% OFF
+                          {Math.round((1 - currentPrice / (selectedVariation?.price || product.base_price)) * 100)}% OFF
                         </span>
                       </div>
                       {/* Sale Price - Prominent Green */}
@@ -170,7 +181,7 @@ const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product, onClos
                         ₱{currentPrice.toLocaleString('en-PH', { minimumFractionDigits: 0 })}
                       </div>
                       <div className="inline-block bg-green-100 text-green-800 px-2 py-0.5 sm:px-2.5 sm:py-1 md:px-3 md:py-1 rounded-full text-[10px] sm:text-xs md:text-sm font-bold border border-green-200">
-                        You Save ₱{(product.base_price - product.discount_price!).toLocaleString('en-PH', { minimumFractionDigits: 0 })}!
+                        You Save ₱{((selectedVariation?.price || product.base_price) - currentPrice).toLocaleString('en-PH', { minimumFractionDigits: 0 })}!
                       </div>
                     </>
                   ) : (

@@ -4,15 +4,17 @@ import Hero from './Hero';
 import ProductDetailModal from './ProductDetailModal';
 import type { Product, ProductVariation, CartItem } from '../types';
 import { Search, Filter, Package } from 'lucide-react';
+import { useGlobalDiscount } from '../hooks/useGlobalDiscount';
 
 interface MenuProps {
   menuItems: Product[];
-  addToCart: (product: Product, variation?: ProductVariation, quantity?: number) => void;
+  addToCart: (product: Product, variation?: ProductVariation, quantity?: number, priceOverride?: number) => void;
   cartItems: CartItem[];
   updateQuantity: (index: number, quantity: number) => void;
 }
 
 const Menu: React.FC<MenuProps> = ({ menuItems, addToCart, cartItems }) => {
+  const { globalDiscount, getDiscountedPrice } = useGlobalDiscount();
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'price' | 'purity'>('name');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -53,9 +55,11 @@ const Menu: React.FC<MenuProps> = ({ menuItems, addToCart, cartItems }) => {
         <ProductDetailModal
           product={selectedProduct}
           onClose={() => setSelectedProduct(null)}
-          onAddToCart={(product, variation, quantity) => {
-            addToCart(product, variation, quantity);
+          onAddToCart={(product, variation, quantity, priceOverride) => {
+            addToCart(product, variation, quantity, priceOverride);
           }}
+          globalDiscount={globalDiscount}
+          getDiscountedPrice={getDiscountedPrice}
         />
       )}
 
@@ -135,6 +139,8 @@ const Menu: React.FC<MenuProps> = ({ menuItems, addToCart, cartItems }) => {
                   onAddToCart={addToCart}
                   cartQuantity={getCartQuantity(product.id)}
                   onProductClick={setSelectedProduct}
+                  globalDiscount={globalDiscount}
+                  getDiscountedPrice={getDiscountedPrice}
                 />
               ))}
             </div>

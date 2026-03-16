@@ -112,6 +112,19 @@ export interface OrderDetails {
   discount_applied?: number;
 }
 
+export interface GlobalDiscount {
+  id: string;
+  name: string;
+  discount_type: 'percentage' | 'fixed';
+  discount_value: number;
+  active: boolean;
+  start_date?: string;
+  end_date?: string;
+  excluded_product_ids: string[];
+  created_at: string;
+  updated_at: string;
+}
+
 export interface PromoCode {
   id: string;
   code: string;

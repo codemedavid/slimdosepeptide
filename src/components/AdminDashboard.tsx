@@ -14,6 +14,7 @@ import FAQManager from './FAQManager';
 import ShippingManager from './ShippingManager';
 import SiteSettingsManager from './SiteSettingsManager';
 import PromoCodeManager from './PromoCodeManager';
+import GlobalDiscountManager from './GlobalDiscountManager';
 import GuideManager from './GuideManager';
 import SalesAnalyticsManager from './SalesAnalyticsManager';
 import { Calendar, BarChart3 } from 'lucide-react';
@@ -25,7 +26,7 @@ const AdminDashboard: React.FC = () => {
   const [loginError, setLoginError] = useState('');
   const { products, loading, addProduct, updateProduct, deleteProduct, refreshProducts } = useMenu();
   const { categories } = useCategories();
-  const [currentView, setCurrentView] = useState<'dashboard' | 'products' | 'add' | 'edit' | 'categories' | 'payments' | 'inventory' | 'orders' | 'shipping' | 'coa' | 'faq' | 'settings' | 'promo-codes' | 'guides' | 'analytics'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'products' | 'add' | 'edit' | 'categories' | 'payments' | 'inventory' | 'orders' | 'shipping' | 'coa' | 'faq' | 'settings' | 'promo-codes' | 'global-discount' | 'guides' | 'analytics'>('dashboard');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [managingVariationsProductId, setManagingVariationsProductId] = useState<string | null>(null);
@@ -1100,6 +1101,24 @@ const AdminDashboard: React.FC = () => {
     );
   }
 
+  // Global Discount View
+  if (currentView === 'global-discount') {
+    return (
+      <div className="min-h-screen bg-gray-50 p-4">
+        <div className="max-w-4xl mx-auto">
+          <button
+            onClick={() => setCurrentView('dashboard')}
+            className="mb-4 text-gray-600 hover:text-navy-900 flex items-center gap-2"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Dashboard
+          </button>
+          <GlobalDiscountManager />
+        </div>
+      </div>
+    );
+  }
+
   // Smart Guides View
   if (currentView === 'guides') {
     return <GuideManager />;
@@ -1366,6 +1385,15 @@ const AdminDashboard: React.FC = () => {
                     <Tag className="h-4 w-4 text-green-700" />
                   </div>
                   <span className="text-sm font-medium text-gray-900">Promo Codes</span>
+                </button>
+                <button
+                  onClick={() => setCurrentView('global-discount')}
+                  className="w-full flex items-center gap-3 p-2 text-left hover:bg-gray-50 rounded-lg transition-all"
+                >
+                  <div className="p-1.5 bg-red-50 rounded-lg">
+                    <Sparkles className="h-4 w-4 text-red-600" />
+                  </div>
+                  <span className="text-sm font-medium text-gray-900">Global Discount</span>
                 </button>
                 <button
                   onClick={() => setCurrentView('guides')}

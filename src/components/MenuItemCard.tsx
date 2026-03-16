@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { Plus, Minus, ShoppingCart, Package } from 'lucide-react';
-import type { Product, ProductVariation } from '../types';
+import type { Product, ProductVariation, GlobalDiscount } from '../types';
 
 interface MenuItemCardProps {
   product: Product;
-  onAddToCart: (product: Product, variation?: ProductVariation, quantity?: number) => void;
+  onAddToCart: (product: Product, variation?: ProductVariation, quantity?: number, priceOverride?: number) => void;
   cartQuantity?: number;
   onUpdateQuantity?: (index: number, quantity: number) => void;
   onProductClick?: (product: Product) => void;
+  globalDiscount?: GlobalDiscount | null;
+  getDiscountedPrice?: (originalPrice: number, productId: string) => { price: number; hasGlobalDiscount: boolean };
 }
 
 const MenuItemCard: React.FC<MenuItemCardProps> = ({
@@ -15,14 +17,16 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({
   onAddToCart,
   cartQuantity = 0,
   onProductClick,
+  globalDiscount,
+  getDiscountedPrice,
 }) => {
   const [selectedVariation, setSelectedVariation] = useState<ProductVariation | undefined>(
     product.variations && product.variations.length > 0 ? product.variations[0] : undefined
   );
   const [quantity, setQuantity] = useState(1);
 
-  // Calculate current price considering both product and variation discounts
-  const currentPrice = selectedVariation
+  // Calculate base price considering individual product/variation discounts
+  const individualPrice = selectedVariation
     ? (selectedVariation.discount_active && selectedVariation.discount_price)
       ? selectedVariation.discount_price
       : selectedVariation.price
@@ -30,16 +34,25 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({
       ? product.discount_price
       : product.base_price;
 
-  // Check if there's an active discount
-  const hasDiscount = selectedVariation
+  const hasIndividualDiscount = selectedVariation
     ? (selectedVariation.discount_active && selectedVariation.discount_price !== null)
     : (product.discount_active && product.discount_price !== null);
 
   // Get original price for strikethrough
   const originalPrice = selectedVariation ? selectedVariation.price : product.base_price;
 
+  // Apply global discount if no individual discount and global discount exists
+  const globalResult = (!hasIndividualDiscount && getDiscountedPrice)
+    ? getDiscountedPrice(originalPrice, product.id)
+    : { price: individualPrice, hasGlobalDiscount: false };
+
+  const currentPrice = globalResult.hasGlobalDiscount ? globalResult.price : individualPrice;
+  const hasDiscount = hasIndividualDiscount || globalResult.hasGlobalDiscount;
+
   const handleAddToCart = () => {
-    onAddToCart(product, selectedVariation, quantity);
+    // Pass the global-discounted price if applicable
+    const priceToUse = globalResult.hasGlobalDiscount ? currentPrice : undefined;
+    onAddToCart(product, selectedVariation, quantity, priceToUse);
     setQuantity(1);
   };
 
