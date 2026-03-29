@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ArrowLeft, Package, CheckCircle, XCircle, Clock, Truck, AlertCircle, Search, RefreshCw, Eye, MessageCircle, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, Package, CheckCircle, XCircle, Clock, Truck, AlertCircle, Search, RefreshCw, Eye, MessageCircle, Image as ImageIcon, Pencil, Save, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useMenu } from '../hooks/useMenu';
 
@@ -258,6 +258,33 @@ const OrdersManager: React.FC<OrdersManagerProps> = ({ onBack }) => {
     }
   };
 
+  const handleSaveOrder = async (orderId: string, updates: Partial<Order>) => {
+    try {
+      setIsProcessing(true);
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', orderId);
+
+      if (error) throw error;
+      await loadOrders();
+
+      if (selectedOrder?.id === orderId) {
+        setSelectedOrder({ ...selectedOrder, ...updates } as Order);
+      }
+
+      alert('Order updated successfully!');
+    } catch (error) {
+      console.error('Error saving order:', error);
+      alert('Failed to save order. Please try again.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const filteredOrders = useMemo(() => {
     let filtered = orders;
 
@@ -335,6 +362,7 @@ const OrdersManager: React.FC<OrdersManagerProps> = ({ onBack }) => {
         onConfirm={() => handleConfirmOrder(selectedOrder)}
         onUpdateStatus={handleUpdateOrderStatus}
         onSaveTracking={handleSaveTracking}
+        onSaveOrder={handleSaveOrder}
         isProcessing={isProcessing}
       />
     );
@@ -551,8 +579,18 @@ interface OrderDetailsViewProps {
   onConfirm: () => void;
   onUpdateStatus: (orderId: string, status: string) => void;
   onSaveTracking: (orderId: string, trackingNumber: string, shippingNote: string) => void;
+  onSaveOrder: (orderId: string, updates: Partial<Order>) => void;
   isProcessing: boolean;
 }
+
+const ORDER_STATUSES = [
+  { value: 'new', label: 'New' },
+  { value: 'confirmed', label: 'Confirmed' },
+  { value: 'processing', label: 'Processing' },
+  { value: 'shipped', label: 'Shipped' },
+  { value: 'delivered', label: 'Delivered' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
 
 const OrderDetailsView: React.FC<OrderDetailsViewProps> = ({
   order,
@@ -560,16 +598,94 @@ const OrderDetailsView: React.FC<OrderDetailsViewProps> = ({
   onConfirm,
   onUpdateStatus,
   onSaveTracking,
+  onSaveOrder,
   isProcessing
 }) => {
   const [trackingNumber, setTrackingNumber] = useState(order.tracking_number || '');
   const [shippingNote, setShippingNote] = useState(order.shipping_note || '');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    customer_name: order.customer_name,
+    customer_email: order.customer_email,
+    customer_phone: order.customer_phone,
+    shipping_address: order.shipping_address,
+    shipping_barangay: order.shipping_barangay || '',
+    shipping_city: order.shipping_city,
+    shipping_state: order.shipping_state,
+    shipping_zip_code: order.shipping_zip_code,
+    shipping_country: order.shipping_country || '',
+    notes: order.notes || '',
+  });
 
   // Update local state when order changes
   useEffect(() => {
     setTrackingNumber(order.tracking_number || '');
     setShippingNote(order.shipping_note || '');
+    setEditForm({
+      customer_name: order.customer_name,
+      customer_email: order.customer_email,
+      customer_phone: order.customer_phone,
+      shipping_address: order.shipping_address,
+      shipping_barangay: order.shipping_barangay || '',
+      shipping_city: order.shipping_city,
+      shipping_state: order.shipping_state,
+      shipping_zip_code: order.shipping_zip_code,
+      shipping_country: order.shipping_country || '',
+      notes: order.notes || '',
+    });
+    setIsEditing(false);
   }, [order]);
+
+  const handleStatusChange = (newStatus: string) => {
+    if (newStatus === order.order_status) return;
+
+    if (newStatus === 'confirmed' && order.order_status === 'new') {
+      onConfirm();
+      return;
+    }
+
+    if (newStatus === 'cancelled') {
+      if (confirm('Are you sure you want to cancel this order?')) {
+        onUpdateStatus(order.id, newStatus);
+      }
+      return;
+    }
+
+    onUpdateStatus(order.id, newStatus);
+  };
+
+  const handleSaveEdit = () => {
+    const updates: Partial<Order> = {
+      customer_name: editForm.customer_name,
+      customer_email: editForm.customer_email,
+      customer_phone: editForm.customer_phone,
+      shipping_address: editForm.shipping_address,
+      shipping_barangay: editForm.shipping_barangay || null,
+      shipping_city: editForm.shipping_city,
+      shipping_state: editForm.shipping_state,
+      shipping_zip_code: editForm.shipping_zip_code,
+      shipping_country: editForm.shipping_country,
+      notes: editForm.notes || null,
+    };
+    onSaveOrder(order.id, updates);
+    setIsEditing(false);
+  };
+
+  const handleCancelEdit = () => {
+    setEditForm({
+      customer_name: order.customer_name,
+      customer_email: order.customer_email,
+      customer_phone: order.customer_phone,
+      shipping_address: order.shipping_address,
+      shipping_barangay: order.shipping_barangay || '',
+      shipping_city: order.shipping_city,
+      shipping_state: order.shipping_state,
+      shipping_zip_code: order.shipping_zip_code,
+      shipping_country: order.shipping_country || '',
+      notes: order.notes || '',
+    });
+    setIsEditing(false);
+  };
   const totalItems = order.order_items.reduce((sum, item) => sum + item.quantity, 0);
   const finalTotal = order.total_price + (order.shipping_fee || 0);
 
@@ -590,6 +706,35 @@ const OrderDetailsView: React.FC<OrderDetailsViewProps> = ({
                 Order #{order.id.slice(0, 8).toUpperCase()}
               </h1>
             </div>
+            <div className="flex items-center gap-2">
+              {isEditing ? (
+                <>
+                  <button
+                    onClick={handleCancelEdit}
+                    className="px-2 md:px-3 py-1.5 md:py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors font-medium text-xs md:text-sm flex items-center gap-1"
+                  >
+                    <X className="w-3 h-3 md:w-4 md:h-4" />
+                    <span className="hidden sm:inline">Cancel</span>
+                  </button>
+                  <button
+                    onClick={handleSaveEdit}
+                    disabled={isProcessing}
+                    className="px-2 md:px-3 py-1.5 md:py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors font-medium text-xs md:text-sm flex items-center gap-1 disabled:opacity-50 shadow-md"
+                  >
+                    <Save className="w-3 h-3 md:w-4 md:h-4" />
+                    <span className="hidden sm:inline">{isProcessing ? 'Saving...' : 'Save'}</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="px-2 md:px-3 py-1.5 md:py-2 bg-navy-900 hover:bg-navy-800 text-white rounded-lg transition-colors font-medium text-xs md:text-sm flex items-center gap-1 shadow-md"
+                >
+                  <Pencil className="w-3 h-3 md:w-4 md:h-4" />
+                  <span className="hidden sm:inline">Edit Order</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -598,16 +743,27 @@ const OrderDetailsView: React.FC<OrderDetailsViewProps> = ({
         <div className="bg-white rounded-lg md:rounded-xl shadow-lg p-4 md:p-6 border border-navy-700/30 space-y-4 md:space-y-6">
           {/* Order Status */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 md:gap-4">
-            <div>
-              <span className={`inline-flex items-center px-3 md:px-4 py-1.5 md:py-2 rounded-full text-xs md:text-sm font-semibold border ${order.order_status === 'new' ? 'bg-gold-100 text-gold-800 border-navy-700' :
-                order.order_status === 'confirmed' ? 'bg-gray-100 text-gray-800 border-gray-300' :
-                  order.order_status === 'processing' ? 'bg-gray-100 text-gray-800 border-gray-300' :
-                    order.order_status === 'shipped' ? 'bg-gray-100 text-gray-800 border-gray-300' :
-                      order.order_status === 'delivered' ? 'bg-green-100 text-green-800 border-green-300' :
-                        'bg-red-100 text-red-800 border-red-300'
-                }`}>
-                {order.order_status.charAt(0).toUpperCase() + order.order_status.slice(1)}
-              </span>
+            <div className="flex items-center gap-3 flex-wrap">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Order Status</label>
+                <select
+                  value={order.order_status}
+                  onChange={(e) => handleStatusChange(e.target.value)}
+                  disabled={isProcessing}
+                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-xs md:text-sm font-semibold border-2 outline-none cursor-pointer transition-colors disabled:opacity-50 ${
+                    order.order_status === 'new' ? 'bg-gold-100 text-gold-800 border-gold-300' :
+                    order.order_status === 'confirmed' ? 'bg-blue-50 text-blue-800 border-blue-300' :
+                    order.order_status === 'processing' ? 'bg-purple-50 text-purple-800 border-purple-300' :
+                    order.order_status === 'shipped' ? 'bg-indigo-50 text-indigo-800 border-indigo-300' :
+                    order.order_status === 'delivered' ? 'bg-green-50 text-green-800 border-green-300' :
+                    'bg-red-50 text-red-800 border-red-300'
+                  }`}
+                >
+                  {ORDER_STATUSES.map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             {order.order_status === 'new' && (
               <button
@@ -625,33 +781,137 @@ const OrderDetailsView: React.FC<OrderDetailsViewProps> = ({
           {/* Customer Info */}
           <div>
             <h3 className="font-bold text-gray-900 mb-2 md:mb-3 text-sm md:text-base">Customer Information</h3>
-            <div className="bg-gray-50 rounded-lg p-3 md:p-4 space-y-1.5 md:space-y-2 text-xs md:text-sm">
-              <p><span className="font-semibold">Name:</span> {order.customer_name}</p>
-              <p><span className="font-semibold">Email:</span> {order.customer_email}</p>
-              <p><span className="font-semibold">Phone:</span> {order.customer_phone}</p>
-              {order.contact_method && (
-                <p className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold">Contact Method:</span>
-                  <span className="flex items-center gap-1 text-blue-500"><MessageCircle className="w-3 h-3 md:w-4 md:h-4" /> Telegram</span>
-                </p>
-              )}
-            </div>
+            {isEditing ? (
+              <div className="bg-gray-50 rounded-lg p-3 md:p-4 space-y-3 text-xs md:text-sm">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
+                  <input
+                    type="text"
+                    value={editForm.customer_name}
+                    onChange={(e) => setEditForm({ ...editForm, customer_name: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500 focus:border-navy-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={editForm.customer_email}
+                    onChange={(e) => setEditForm({ ...editForm, customer_email: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500 focus:border-navy-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Phone</label>
+                  <input
+                    type="text"
+                    value={editForm.customer_phone}
+                    onChange={(e) => setEditForm({ ...editForm, customer_phone: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500 focus:border-navy-500 outline-none"
+                  />
+                </div>
+                {order.contact_method && (
+                  <p className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold">Contact Method:</span>
+                    <span className="flex items-center gap-1 text-blue-500"><MessageCircle className="w-3 h-3 md:w-4 md:h-4" /> Telegram</span>
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="bg-gray-50 rounded-lg p-3 md:p-4 space-y-1.5 md:space-y-2 text-xs md:text-sm">
+                <p><span className="font-semibold">Name:</span> {order.customer_name}</p>
+                <p><span className="font-semibold">Email:</span> {order.customer_email}</p>
+                <p><span className="font-semibold">Phone:</span> {order.customer_phone}</p>
+                {order.contact_method && (
+                  <p className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold">Contact Method:</span>
+                    <span className="flex items-center gap-1 text-blue-500"><MessageCircle className="w-3 h-3 md:w-4 md:h-4" /> Telegram</span>
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Shipping Address */}
           <div>
             <h3 className="font-bold text-gray-900 mb-2 md:mb-3 text-sm md:text-base">Shipping Address</h3>
-            <div className="bg-gray-50 rounded-lg p-3 md:p-4 text-xs md:text-sm">
-              <p>{order.shipping_address}</p>
-              {order.shipping_barangay && (
-                <p>Barangay: {order.shipping_barangay}</p>
-              )}
-              <p>{order.shipping_city}, {order.shipping_state} {order.shipping_zip_code}</p>
-              <p>{order.shipping_country}</p>
-              {order.shipping_location && (
-                <p className="mt-2"><span className="font-semibold">Region:</span> {order.shipping_location}</p>
-              )}
-            </div>
+            {isEditing ? (
+              <div className="bg-gray-50 rounded-lg p-3 md:p-4 space-y-3 text-xs md:text-sm">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Street Address</label>
+                  <input
+                    type="text"
+                    value={editForm.shipping_address}
+                    onChange={(e) => setEditForm({ ...editForm, shipping_address: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500 focus:border-navy-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Barangay</label>
+                  <input
+                    type="text"
+                    value={editForm.shipping_barangay}
+                    onChange={(e) => setEditForm({ ...editForm, shipping_barangay: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500 focus:border-navy-500 outline-none"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">City</label>
+                    <input
+                      type="text"
+                      value={editForm.shipping_city}
+                      onChange={(e) => setEditForm({ ...editForm, shipping_city: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500 focus:border-navy-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Province/State</label>
+                    <input
+                      type="text"
+                      value={editForm.shipping_state}
+                      onChange={(e) => setEditForm({ ...editForm, shipping_state: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500 focus:border-navy-500 outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Zip Code</label>
+                    <input
+                      type="text"
+                      value={editForm.shipping_zip_code}
+                      onChange={(e) => setEditForm({ ...editForm, shipping_zip_code: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500 focus:border-navy-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Country</label>
+                    <input
+                      type="text"
+                      value={editForm.shipping_country}
+                      onChange={(e) => setEditForm({ ...editForm, shipping_country: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500 focus:border-navy-500 outline-none"
+                    />
+                  </div>
+                </div>
+                {order.shipping_location && (
+                  <p><span className="font-semibold">Region:</span> {order.shipping_location}</p>
+                )}
+              </div>
+            ) : (
+              <div className="bg-gray-50 rounded-lg p-3 md:p-4 text-xs md:text-sm">
+                <p>{order.shipping_address}</p>
+                {order.shipping_barangay && (
+                  <p>Barangay: {order.shipping_barangay}</p>
+                )}
+                <p>{order.shipping_city}, {order.shipping_state} {order.shipping_zip_code}</p>
+                <p>{order.shipping_country}</p>
+                {order.shipping_location && (
+                  <p className="mt-2"><span className="font-semibold">Region:</span> {order.shipping_location}</p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Shipping & Tracking Details (Editable) */}
@@ -791,63 +1051,27 @@ const OrderDetailsView: React.FC<OrderDetailsViewProps> = ({
           </div>
 
           {/* Notes */}
-          {order.notes && (
+          {(order.notes || isEditing) && (
             <div>
               <h3 className="font-bold text-gray-900 mb-2 md:mb-3 text-sm md:text-base">Notes</h3>
-              <div className="bg-gray-50 rounded-lg p-3 md:p-4">
-                <p className="text-gray-700 text-xs md:text-sm">{order.notes}</p>
-              </div>
+              {isEditing ? (
+                <div className="bg-gray-50 rounded-lg p-3 md:p-4">
+                  <textarea
+                    value={editForm.notes}
+                    onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                    placeholder="Add notes..."
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500 focus:border-navy-500 outline-none text-xs md:text-sm"
+                  />
+                </div>
+              ) : (
+                <div className="bg-gray-50 rounded-lg p-3 md:p-4">
+                  <p className="text-gray-700 text-xs md:text-sm">{order.notes}</p>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Status Update Buttons */}
-          {order.order_status !== 'new' && order.order_status !== 'cancelled' && order.order_status !== 'delivered' && (
-            <div className="border-t-2 border-gray-200 pt-3 md:pt-4">
-              <h3 className="font-bold text-gray-900 mb-2 md:mb-3 text-sm md:text-base">Update Status</h3>
-              <div className="flex flex-wrap gap-2">
-                {order.order_status === 'confirmed' && (
-                  <button
-                    onClick={() => onUpdateStatus(order.id, 'processing')}
-                    disabled={isProcessing}
-                    className="px-3 md:px-4 py-1.5 md:py-2 bg-gradient-to-r from-gray-800 to-black hover:from-gray-900 hover:to-black text-white rounded-lg transition-colors disabled:opacity-50 text-xs md:text-sm font-medium shadow-md hover:shadow-lg border border-navy-900/20"
-                  >
-                    Mark as Processing
-                  </button>
-                )}
-                {order.order_status === 'processing' && (
-                  <button
-                    onClick={() => onUpdateStatus(order.id, 'shipped')}
-                    disabled={isProcessing}
-                    className="px-3 md:px-4 py-1.5 md:py-2 bg-gradient-to-r from-gray-800 to-black hover:from-gray-900 hover:to-black text-white rounded-lg transition-colors disabled:opacity-50 text-xs md:text-sm font-medium shadow-md hover:shadow-lg border border-navy-900/20"
-                  >
-                    Mark as Shipped
-                  </button>
-                )}
-                {order.order_status === 'shipped' && (
-                  <button
-                    onClick={() => onUpdateStatus(order.id, 'delivered')}
-                    disabled={isProcessing}
-                    className="px-3 md:px-4 py-1.5 md:py-2 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-lg transition-colors disabled:opacity-50 text-xs md:text-sm font-medium shadow-md hover:shadow-lg"
-                  >
-                    Mark as Delivered
-                  </button>
-                )}
-                {(order.order_status === 'new' || order.order_status === 'confirmed' || order.order_status === 'processing') && (
-                  <button
-                    onClick={() => {
-                      if (confirm('Are you sure you want to cancel this order?')) {
-                        onUpdateStatus(order.id, 'cancelled');
-                      }
-                    }}
-                    disabled={isProcessing}
-                    className="px-3 md:px-4 py-1.5 md:py-2 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-lg transition-colors disabled:opacity-50 text-xs md:text-sm font-medium shadow-md hover:shadow-lg"
-                  >
-                    Cancel Order
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
