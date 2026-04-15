@@ -4,6 +4,11 @@ import { useGlobalDiscountAdmin } from '../hooks/useGlobalDiscount';
 import type { GlobalDiscount, Product } from '../types';
 import { Plus, Trash2, Edit2, CheckCircle, XCircle, Percent, Search, X } from 'lucide-react';
 
+const toIsoBoundary = (dateValue: string, boundary: 'start' | 'end') => {
+  const timePart = boundary === 'start' ? 'T00:00:00.000' : 'T23:59:59.999';
+  return new Date(`${dateValue}${timePart}`).toISOString();
+};
+
 const GlobalDiscountManager: React.FC = () => {
   const { discounts, loading, saveDiscount, deleteDiscount, toggleActive } = useGlobalDiscountAdmin();
   const [products, setProducts] = useState<Product[]>([]);
@@ -285,7 +290,7 @@ const GlobalDiscountManager: React.FC = () => {
                     type="date"
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg"
                     value={formData.start_date ? formData.start_date.split('T')[0] : ''}
-                    onChange={e => setFormData({ ...formData, start_date: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
+                    onChange={e => setFormData({ ...formData, start_date: e.target.value ? toIsoBoundary(e.target.value, 'start') : undefined })}
                   />
                 </div>
                 <div>
@@ -294,7 +299,7 @@ const GlobalDiscountManager: React.FC = () => {
                     type="date"
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg"
                     value={formData.end_date ? formData.end_date.split('T')[0] : ''}
-                    onChange={e => setFormData({ ...formData, end_date: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
+                    onChange={e => setFormData({ ...formData, end_date: e.target.value ? toIsoBoundary(e.target.value, 'end') : undefined })}
                   />
                 </div>
               </div>

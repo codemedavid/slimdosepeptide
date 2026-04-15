@@ -8,12 +8,25 @@ interface DiscountedPriceResult {
   originalPrice: number;
 }
 
+const getDateBoundary = (value: string | undefined, boundary: 'start' | 'end') => {
+  if (!value) return null;
+
+  const datePart = value.slice(0, 10);
+  const timePart = boundary === 'start' ? 'T00:00:00.000' : 'T23:59:59.999';
+  const parsed = new Date(`${datePart}${timePart}`);
+
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 const isGlobalDiscountActive = (globalDiscount?: GlobalDiscount | null) => {
   if (!globalDiscount?.active) return false;
 
   const now = new Date();
-  if (globalDiscount.start_date && new Date(globalDiscount.start_date) > now) return false;
-  if (globalDiscount.end_date && new Date(globalDiscount.end_date) < now) return false;
+  const startDate = getDateBoundary(globalDiscount.start_date, 'start');
+  const endDate = getDateBoundary(globalDiscount.end_date, 'end');
+
+  if (startDate && startDate > now) return false;
+  if (endDate && endDate < now) return false;
 
   return true;
 };
