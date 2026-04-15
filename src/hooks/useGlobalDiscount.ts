@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import type { GlobalDiscount } from '../types';
+import { getGlobalDiscountedPrice } from '../utils/pricing';
 
 export function useGlobalDiscount() {
   const [globalDiscount, setGlobalDiscount] = useState<GlobalDiscount | null>(null);
@@ -30,25 +31,18 @@ export function useGlobalDiscount() {
         .from('global_discounts')
         .select('*')
         .eq('active', true)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      // Check if within date range
-      if (data) {
-        const now = new Date();
-        if (data.start_date && new Date(data.start_date) > now) {
-          setGlobalDiscount(null);
-        } else if (data.end_date && new Date(data.end_date) < now) {
-          setGlobalDiscount(null);
-        } else {
-          setGlobalDiscount(data as GlobalDiscount);
-        }
-      } else {
-        setGlobalDiscount(null);
-      }
+      const now = new Date();
+      const activeDiscount = (data as GlobalDiscount[] | null)?.find(discount => {
+        if (discount.start_date && new Date(discount.start_date) > now) return false;
+        if (discount.end_date && new Date(discount.end_date) < now) return false;
+        return true;
+      }) ?? null;
+
+      setGlobalDiscount(activeDiscount);
     } catch (err) {
       console.error('Error fetching global discount:', err);
       setGlobalDiscount(null);
@@ -58,23 +52,7 @@ export function useGlobalDiscount() {
   };
 
   const getDiscountedPrice = (originalPrice: number, productId: string): { price: number; hasGlobalDiscount: boolean } => {
-    if (!globalDiscount || !globalDiscount.active) {
-      return { price: originalPrice, hasGlobalDiscount: false };
-    }
-
-    // Check if product is excluded
-    if (globalDiscount.excluded_product_ids?.includes(productId)) {
-      return { price: originalPrice, hasGlobalDiscount: false };
-    }
-
-    let discountedPrice: number;
-    if (globalDiscount.discount_type === 'percentage') {
-      discountedPrice = originalPrice * (1 - globalDiscount.discount_value / 100);
-    } else {
-      discountedPrice = Math.max(0, originalPrice - globalDiscount.discount_value);
-    }
-
-    return { price: Math.round(discountedPrice), hasGlobalDiscount: true };
+    return getGlobalDiscountedPrice(originalPrice, productId, globalDiscount);
   };
 
   return {

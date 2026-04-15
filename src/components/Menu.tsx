@@ -14,7 +14,7 @@ interface MenuProps {
 }
 
 const Menu: React.FC<MenuProps> = ({ menuItems, addToCart, cartItems }) => {
-  const { globalDiscount, getDiscountedPrice } = useGlobalDiscount();
+  const { globalDiscount } = useGlobalDiscount();
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'price' | 'purity'>('name');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -59,7 +59,6 @@ const Menu: React.FC<MenuProps> = ({ menuItems, addToCart, cartItems }) => {
             addToCart(product, variation, quantity, priceOverride);
           }}
           globalDiscount={globalDiscount}
-          getDiscountedPrice={getDiscountedPrice}
         />
       )}
 
@@ -140,7 +139,6 @@ const Menu: React.FC<MenuProps> = ({ menuItems, addToCart, cartItems }) => {
                   cartQuantity={getCartQuantity(product.id)}
                   onProductClick={setSelectedProduct}
                   globalDiscount={globalDiscount}
-                  getDiscountedPrice={getDiscountedPrice}
                 />
               ))}
             </div>

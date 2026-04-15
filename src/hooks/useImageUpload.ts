@@ -91,48 +91,13 @@ export const useImageUpload = (folder: string = 'menu-images') => {
         });
       }, 100);
 
-      // Create timeout promise
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        uploadTimeout = setTimeout(() => {
-          reject(new Error('Upload timeout - The storage bucket might not exist. Please run CREATE_STORAGE_BUCKET.sql in Supabase SQL Editor.'));
-        }, 30000); // 30 second timeout
-      });
-
       // Upload to Supabase Storage (using dynamic folder/bucket)
       console.log('📤 Uploading image to Supabase Storage:', { folder, fileName, fileSize: file.size });
-
-      // First, check if bucket exists by trying to list it
-      const bucketCheckPromise = supabase.storage
-        .from(folder)
-        .list('', { limit: 1 });
-
-      const bucketCheckResult = await Promise.race([
-        bucketCheckPromise,
-        timeoutPromise
-      ]);
-
-      // Clear timeout if bucket check succeeded
-      if (uploadTimeout) {
-        clearTimeout(uploadTimeout);
-        uploadTimeout = null;
-      }
-
-      if (bucketCheckResult.error) {
-        if (progressInterval) clearInterval(progressInterval);
-        console.error('❌ Bucket check failed:', bucketCheckResult.error);
-
-        if (bucketCheckResult.error.message?.includes('not found') || bucketCheckResult.error.message?.includes('Bucket not found')) {
-          throw new Error(`Storage bucket "${folder}" not found!\n\nPlease run the appropriate migration file in Supabase SQL Editor to create it.`);
-        }
-        throw new Error(`Bucket error: ${bucketCheckResult.error.message}`);
-      }
-
-      console.log('✅ Bucket exists, proceeding with upload...');
 
       // Create new timeout for upload
       const uploadTimeoutPromise = new Promise<never>((_, reject) => {
         uploadTimeout = setTimeout(() => {
-          reject(new Error('Upload timeout - The upload is taking too long. Please check your connection and try again.'));
+          reject(new Error('Upload timeout. Please check your connection and try again.'));
         }, 30000); // 30 second timeout
       });
 
@@ -172,6 +137,8 @@ export const useImageUpload = (folder: string = 'menu-images') => {
           throw new Error(`Storage bucket "${folder}" not found!\n\nPlease run the appropriate migration file in Supabase SQL Editor.`);
         } else if (uploadResult.error.message?.includes('new row violates row-level security') || uploadResult.error.message?.includes('row-level security')) {
           throw new Error('Storage policy error!\n\nPlease run CREATE_STORAGE_BUCKET.sql to set up policies.');
+        } else if (uploadResult.error.message?.includes('mime type') || uploadResult.error.message?.includes('invalid mime')) {
+          throw new Error('This file type is not allowed by storage. Please upload a JPG, PNG, WebP, GIF, HEIC, or HEIF image.');
         } else {
           throw new Error(`Upload failed: ${uploadResult.error.message || 'Unknown error'}`);
         }
