@@ -19,9 +19,7 @@ import GuideManager from './GuideManager';
 import SalesAnalyticsManager from './SalesAnalyticsManager';
 import { Calendar, BarChart3 } from 'lucide-react';
 const AdminDashboard: React.FC = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return localStorage.getItem('peptide_admin_auth') === 'true';
-  });
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const { products, loading, addProduct, updateProduct, deleteProduct, refreshProducts } = useMenu();
@@ -345,9 +343,8 @@ const AdminDashboard: React.FC = () => {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === 'Slimdose@Admin!2025') {
+    if (password === 'SLMDOSE2026') {
       setIsAuthenticated(true);
-      localStorage.setItem('peptide_admin_auth', 'true');
       setLoginError('');
     } else {
       setLoginError('Invalid password');
@@ -356,7 +353,6 @@ const AdminDashboard: React.FC = () => {
 
   const handleLogout = () => {
     setIsAuthenticated(false);
-    localStorage.removeItem('peptide_admin_auth');
     setPassword('');
     setCurrentView('dashboard');
   };
