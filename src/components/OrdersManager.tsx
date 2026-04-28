@@ -40,6 +40,9 @@ interface Order {
   updated_at: string;
   tracking_number: string | null;
   shipping_note: string | null;
+  promo_code: string | null;
+  promo_code_id: string | null;
+  discount_applied: number | null;
 }
 
 interface OrdersManagerProps {
@@ -548,6 +551,12 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onView, getStatusColor, ge
               {order.shipping_fee && order.shipping_fee > 0 && (
                 <p className="text-[10px] md:text-xs text-gray-500">+ ₱{order.shipping_fee} shipping</p>
               )}
+              {order.discount_applied && order.discount_applied > 0 && (
+                <p className="text-[10px] md:text-xs text-green-600">
+                  -₱{order.discount_applied.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                  {order.promo_code ? ` (${order.promo_code})` : ' discount'}
+                </p>
+              )}
             </div>
             <div>
               <span className="text-gray-500 text-[10px] md:text-xs">Date</span>
@@ -1033,10 +1042,29 @@ const OrderDetailsView: React.FC<OrderDetailsViewProps> = ({
           {/* Order Summary */}
           <div className="border-t-2 border-gray-200 pt-3 md:pt-4">
             <div className="space-y-1.5 md:space-y-2 text-xs md:text-sm">
-              <div className="flex justify-between">
-                <span>Subtotal:</span>
-                <span className="font-semibold">₱{order.total_price.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
-              </div>
+              {order.discount_applied && order.discount_applied > 0 ? (
+                <>
+                  <div className="flex justify-between">
+                    <span>Subtotal:</span>
+                    <span className="font-semibold">₱{(order.total_price + order.discount_applied).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between text-green-600">
+                    <span>
+                      Discount{order.promo_code ? ` (${order.promo_code})` : ''}:
+                    </span>
+                    <span className="font-semibold">-₱{order.discount_applied.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Subtotal after discount:</span>
+                    <span className="font-semibold">₱{order.total_price.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex justify-between">
+                  <span>Subtotal:</span>
+                  <span className="font-semibold">₱{order.total_price.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
+                </div>
+              )}
               {order.shipping_fee && order.shipping_fee > 0 && (
                 <div className="flex justify-between">
                   <span>Shipping Fee:</span>
