@@ -1,6 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { useQuery } from 'convex/react';
-import { api } from '../../convex/_generated/api';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import { useGlobalDiscountAdmin } from '../hooks/useGlobalDiscount';
 import type { GlobalDiscount, Product } from '../types';
 import { Plus, Trash2, Edit2, CheckCircle, XCircle, Percent, Search, X } from 'lucide-react';
@@ -12,11 +11,7 @@ const toIsoBoundary = (dateValue: string, boundary: 'start' | 'end') => {
 
 const GlobalDiscountManager: React.FC = () => {
   const { discounts, loading, saveDiscount, deleteDiscount, toggleActive } = useGlobalDiscountAdmin();
-  const productData = useQuery(api.products.listAll);
-  const products = useMemo(
-    () => ((productData ?? []) as any[]).filter((p) => p.available !== false) as Product[],
-    [productData],
-  );
+  const [products, setProducts] = useState<Product[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDiscount, setEditingDiscount] = useState<GlobalDiscount | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -29,6 +24,19 @@ const GlobalDiscountManager: React.FC = () => {
     active: true,
     excluded_product_ids: [],
   });
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const fetchProducts = async () => {
+    const { data } = await supabase
+      .from('products')
+      .select('id, name, base_price, image_url, available')
+      .eq('available', true)
+      .order('name');
+    if (data) setProducts(data as Product[]);
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();

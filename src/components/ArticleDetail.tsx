@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from 'convex/react';
-import { api } from '../../convex/_generated/api';
+import { supabase } from '../lib/supabase';
 import { ArrowLeft, Calendar, User, ShoppingCart, Package, Check } from 'lucide-react';
 
 interface Article {
@@ -51,36 +50,59 @@ const sanitizeHtml = (html: string): string => {
 export default function ArticleDetail() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
-    const articleData = useQuery(api.guideTopics.getById, id ? { id } : 'skip');
-    const article = (articleData ?? null) as Article | null;
-    const loading = articleData === undefined;
-
-    const relatedIds = article?.related_product_ids ?? [];
-    const relatedQuery = useQuery(
-        api.products.listByIds,
-        relatedIds.length > 0 ? { ids: relatedIds } : 'skip',
-    );
-    const relatedProducts = ((relatedQuery ?? []) as any[]).map((p) => ({
-        id: p.id,
-        name: p.name,
-        base_price: p.base_price,
-        discount_price: p.discount_price,
-        discount_active: p.discount_active,
-        image_url: p.image_url,
-        variations: (p.variations ?? []).map((v: any) => ({
-            id: v.id,
-            name: v.name,
-            price: v.price,
-        })),
-    })) as RelatedProduct[];
-
+    const [article, setArticle] = useState<Article | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [relatedProducts, setRelatedProducts] = useState<RelatedProduct[]>([]);
     const [addedToCart, setAddedToCart] = useState<Set<string>>(new Set());
     const [cartItemCount, setCartItemCount] = useState(0);
     const [showCartToast, setShowCartToast] = useState(false);
 
     useEffect(() => {
-        // No-op: queries fire automatically when `id` changes.
+        if (id) {
+            fetchArticle(id);
+        }
     }, [id]);
+
+    const fetchArticle = async (articleId: string) => {
+        try {
+            setLoading(true);
+
+            const { data, error } = await supabase
+                .from('guide_topics')
+                .select('*')
+                .eq('id', articleId)
+                .eq('is_enabled', true)
+                .single();
+
+            if (error) throw error;
+
+            if (data) {
+                setArticle(data);
+                // Fetch related products if any
+                if (data.related_product_ids && data.related_product_ids.length > 0) {
+                    fetchRelatedProducts(data.related_product_ids);
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching article:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchRelatedProducts = async (productIds: string[]) => {
+        try {
+            const { data, error } = await supabase
+                .from('products')
+                .select('id, name, base_price, discount_price, discount_active, image_url, variations:product_variations(id, name, price)')
+                .in('id', productIds);
+
+            if (error) throw error;
+            setRelatedProducts(data || []);
+        } catch (error) {
+            console.error('Error fetching related products:', error);
+        }
+    };
 
     const handleAddToCart = (product: RelatedProduct) => {
         // Create cart item with all required fields matching the Product type

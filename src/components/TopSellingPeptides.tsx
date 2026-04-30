@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
-import { useQuery } from 'convex/react';
-import { api } from '../../convex/_generated/api';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import { Trophy, TrendingUp, Package } from 'lucide-react';
 
 interface TopProduct {
@@ -11,13 +10,30 @@ interface TopProduct {
 
 const TopSellingPeptides: React.FC = () => {
     const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
-    const data = useQuery(api.analytics.topProducts, { period, limit: 5 });
-    const products: TopProduct[] = (data ?? []).map((row: any) => ({
-        product_name: row.product_name,
-        total_sold: row.units,
-        total_revenue: row.revenue,
-    }));
-    const loading = data === undefined;
+    const [products, setProducts] = useState<TopProduct[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        fetchTopProducts();
+    }, [period]);
+
+    const fetchTopProducts = async () => {
+        try {
+            setLoading(true);
+            const { data, error } = await supabase
+                .rpc('get_top_products', { period, limit_count: 5 });
+
+            if (error) throw error;
+
+            if (data) {
+                setProducts(data);
+            }
+        } catch (error) {
+            console.error('Error fetching top products:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     return (
         <div className="bg-white rounded-xl shadow-md border border-navy-900/10 overflow-hidden h-full">

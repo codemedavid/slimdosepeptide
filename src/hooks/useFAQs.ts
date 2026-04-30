@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
-import { useMutation, useQuery } from 'convex/react';
-import { api } from '../../convex/_generated/api';
+import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
+import { mirrorFaqCreate, mirrorFaqDelete, mirrorFaqUpdate } from '../lib/convexMirror';
 
 export interface FAQItem {
     id: string;
@@ -21,6 +21,7 @@ export interface FAQCategory {
 }
 
 const defaultFAQs: FAQItem[] = [
+    // Product & Usage
     {
         id: '1',
         question: 'Can I use Tirzepatide?',
@@ -71,6 +72,7 @@ const defaultFAQs: FAQItem[] = [
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
     },
+    // Ordering & Packaging
     {
         id: '6',
         question: "What's included in my order?",
@@ -101,6 +103,7 @@ const defaultFAQs: FAQItem[] = [
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
     },
+    // Payment Methods
     {
         id: '9',
         question: 'What payment options do you accept?',
@@ -111,6 +114,7 @@ const defaultFAQs: FAQItem[] = [
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
     },
+    // Shipping & Delivery
     {
         id: '10',
         question: 'Where are you located?',
@@ -154,52 +158,112 @@ const defaultFAQs: FAQItem[] = [
 ];
 
 export const useFAQs = () => {
-    const data = useQuery(api.faqs.listActive);
-    const loading = data === undefined;
+    const [faqs, setFaqs] = useState<FAQItem[]>(defaultFAQs);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-    const faqs = useMemo<FAQItem[]>(() => {
-        if (!data || data.length === 0) return defaultFAQs;
-        return data as FAQItem[];
-    }, [data]);
+    const fetchFAQs = async () => {
+        try {
+            setLoading(true);
+            const { data, error: fetchError } = await supabase
+                .from('faqs')
+                .select('*')
+                .eq('is_active', true)
+                .order('order_index', { ascending: true });
 
-    const categories = [...new Set(faqs.map((faq) => faq.category))];
+            if (fetchError) {
+                console.warn('FAQs table not found, using defaults:', fetchError.message);
+                setFaqs(defaultFAQs);
+            } else if (data && data.length > 0) {
+                setFaqs(data);
+            } else {
+                setFaqs(defaultFAQs);
+            }
+        } catch (err) {
+            console.error('Error fetching FAQs:', err);
+            setFaqs(defaultFAQs);
+        } finally {
+            setLoading(false);
+        }
+    };
 
-    return { faqs, categories, loading, error: null, refetch: () => Promise.resolve() };
+    useEffect(() => {
+        fetchFAQs();
+    }, []);
+
+    const categories = [...new Set(faqs.map(faq => faq.category))];
+
+    return { faqs, categories, loading, error, refetch: fetchFAQs };
 };
 
 export const useFAQsAdmin = () => {
-    const data = useQuery(api.faqs.listAll);
-    const createMutation = useMutation(api.faqs.create);
-    const updateMutation = useMutation(api.faqs.update);
-    const removeMutation = useMutation(api.faqs.remove);
+    const [faqs, setFaqs] = useState<FAQItem[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-    const faqs = useMemo(() => (data ?? []) as FAQItem[], [data]);
-    const loading = data === undefined;
+    const fetchAllFAQs = async () => {
+        try {
+            setLoading(true);
+            const { data, error: fetchError } = await supabase
+                .from('faqs')
+                .select('*')
+                .order('order_index', { ascending: true });
+
+            if (fetchError) {
+                console.warn('FAQs table not found:', fetchError.message);
+                setFaqs([]);
+            } else {
+                setFaqs(data || []);
+            }
+        } catch (err) {
+            console.error('Error fetching FAQs:', err);
+            setError(err instanceof Error ? err.message : 'Unknown error');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const addFAQ = async (faq: Omit<FAQItem, 'id' | 'created_at' | 'updated_at'>) => {
-        return createMutation({
-            question: faq.question,
-            answer: faq.answer,
-            category: faq.category,
-            order_index: faq.order_index,
-            is_active: faq.is_active,
-        });
+        const { data, error } = await supabase
+            .from('faqs')
+            .insert([faq])
+            .select()
+            .single();
+
+        if (error) throw error;
+        mirrorFaqCreate(faq);
+        await fetchAllFAQs();
+        return data;
     };
 
     const updateFAQ = async (id: string, updates: Partial<FAQItem>) => {
-        return updateMutation({
-            id,
-            question: updates.question,
-            answer: updates.answer,
-            category: updates.category,
-            order_index: updates.order_index,
-            is_active: updates.is_active,
-        });
+        const { data, error } = await supabase
+            .from('faqs')
+            .update({ ...updates, updated_at: new Date().toISOString() })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        mirrorFaqUpdate(id, updates);
+        await fetchAllFAQs();
+        return data;
     };
 
     const deleteFAQ = async (id: string) => {
-        await removeMutation({ id });
+        const { error } = await supabase
+            .from('faqs')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+        mirrorFaqDelete(id);
+        await fetchAllFAQs();
     };
 
-    return { faqs, loading, error: null, addFAQ, updateFAQ, deleteFAQ, refetch: () => Promise.resolve() };
+    useEffect(() => {
+        fetchAllFAQs();
+    }, []);
+
+    return { faqs, loading, error, addFAQ, updateFAQ, deleteFAQ, refetch: fetchAllFAQs };
 };

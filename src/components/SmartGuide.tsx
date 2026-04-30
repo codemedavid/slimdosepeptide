@@ -1,6 +1,6 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from 'convex/react';
-import { api } from '../../convex/_generated/api';
+import { supabase } from '../lib/supabase';
 import { FileText, ArrowLeft, BookOpen, Calendar, User, ChevronRight } from 'lucide-react';
 
 interface Article {
@@ -13,10 +13,35 @@ interface Article {
 }
 
 export default function SmartGuide() {
-    const data = useQuery(api.guideTopics.listEnabledSummaries);
-    const articles = (data ?? []) as Article[];
-    const loading = data === undefined;
+    const [articles, setArticles] = useState<Article[]>([]);
+    const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
+
+    useEffect(() => {
+        fetchArticles();
+    }, []);
+
+    const fetchArticles = async () => {
+        try {
+            setLoading(true);
+
+            const { data, error } = await supabase
+                .from('guide_topics')
+                .select('id, title, preview, author, published_date, cover_image')
+                .eq('is_enabled', true)
+                .order('display_order', { ascending: true });
+
+            if (error) throw error;
+
+            if (data) {
+                setArticles(data);
+            }
+        } catch (error) {
+            console.error('Error fetching articles:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     if (loading) {
         return (

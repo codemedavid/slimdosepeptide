@@ -1,6 +1,11 @@
-import { useState, useRef } from 'react';
-import { useMutation, useQuery } from 'convex/react';
-import { api } from '../../convex/_generated/api';
+import { useEffect, useState, useRef } from 'react';
+import { supabase } from '../lib/supabase';
+import {
+  mirrorGuideCreate,
+  mirrorGuideDelete,
+  mirrorGuideSetEnabled,
+  mirrorGuideUpdate,
+} from '../lib/convexMirror';
 import {
     Plus,
     Edit2,
@@ -55,21 +60,7 @@ interface ModalData {
 }
 
 export default function GuideManager() {
-    const articlesData = useQuery(api.guideTopics.listAll);
-    const productsData = useQuery(api.products.listAll);
-    const articles = (articlesData ?? []) as Article[];
-    const products = ((productsData ?? []) as any[]).map((p) => ({
-        id: p.id,
-        name: p.name,
-        base_price: p.base_price,
-        image_url: p.image_url,
-    })) as SimpleProduct[];
-
-    const createArticle = useMutation(api.guideTopics.create);
-    const updateArticle = useMutation(api.guideTopics.update);
-    const removeArticle = useMutation(api.guideTopics.remove);
-    const setArticleEnabled = useMutation(api.guideTopics.setEnabled);
-
+    const [articles, setArticles] = useState<Article[]>([]);
     const [showModal, setShowModal] = useState(false);
     const [modalData, setModalData] = useState<ModalData>({
         title: '',
@@ -83,7 +74,44 @@ export default function GuideManager() {
         related_product_ids: []
     });
     const [editingArticle, setEditingArticle] = useState<string | null>(null);
+    const [products, setProducts] = useState<SimpleProduct[]>([]);
     const contentEditorRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        fetchArticles();
+        fetchProducts();
+    }, []);
+
+    const fetchProducts = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('products')
+                .select('id, name, base_price, image_url')
+                .order('name');
+            if (error) throw error;
+            setProducts(data || []);
+        } catch (error) {
+            console.error('Error fetching products:', error);
+        }
+    };
+
+    const fetchArticles = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('guide_topics')
+                .select('*')
+                .order('display_order', { ascending: true });
+
+            if (error) throw error;
+
+            if (data) {
+                setArticles(data);
+            }
+        } catch (error) {
+            console.error('Error fetching articles:', error);
+            alert('Failed to fetch articles');
+        }
+    };
 
     const openModal = (article?: Article) => {
         if (article) {
@@ -155,16 +183,33 @@ export default function GuideManager() {
                 published_date: modalData.published_date,
                 display_order: modalData.display_order,
                 is_enabled: modalData.is_enabled,
-                related_product_ids: modalData.related_product_ids,
+                related_product_ids: modalData.related_product_ids
             };
 
             if (editingArticle) {
-                await updateArticle({ id: editingArticle, ...articleData });
+                // Update existing article
+                const { error } = await supabase
+                    .from('guide_topics')
+                    .update({
+                        ...articleData,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', editingArticle);
+
+                if (error) throw error;
+                mirrorGuideUpdate(editingArticle, articleData);
             } else {
-                await createArticle(articleData);
+                // Create new article
+                const { error } = await supabase
+                    .from('guide_topics')
+                    .insert(articleData);
+
+                if (error) throw error;
+                mirrorGuideCreate(articleData);
             }
 
             closeModal();
+            fetchArticles();
         } catch (error) {
             console.error('Error saving article:', error);
             alert('Failed to save article');
@@ -177,7 +222,15 @@ export default function GuideManager() {
         }
 
         try {
-            await removeArticle({ id: articleId });
+            const { error } = await supabase
+                .from('guide_topics')
+                .delete()
+                .eq('id', articleId);
+
+            if (error) throw error;
+            mirrorGuideDelete(articleId);
+
+            fetchArticles();
         } catch (error) {
             console.error('Error deleting article:', error);
             alert('Failed to delete article');
@@ -186,7 +239,15 @@ export default function GuideManager() {
 
     const toggleEnabled = async (articleId: string, currentlyEnabled: boolean) => {
         try {
-            await setArticleEnabled({ id: articleId, is_enabled: !currentlyEnabled });
+            const { error } = await supabase
+                .from('guide_topics')
+                .update({ is_enabled: !currentlyEnabled, updated_at: new Date().toISOString() })
+                .eq('id', articleId);
+
+            if (error) throw error;
+            mirrorGuideSetEnabled(articleId, !currentlyEnabled);
+
+            fetchArticles();
         } catch (error) {
             console.error('Error toggling article:', error);
             alert('Failed to update article status');
