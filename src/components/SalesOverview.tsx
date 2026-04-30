@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import React, { useMemo, useState } from 'react';
+import { useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 import { DollarSign, ShoppingBag, TrendingUp, Calendar } from 'lucide-react';
 
 interface SalesData {
@@ -9,36 +10,25 @@ interface SalesData {
     period: string;
 }
 
+function periodRange(period: 'daily' | 'weekly' | 'monthly'): { start: string; end: string } {
+    const now = new Date();
+    const start = new Date(now);
+    if (period === 'daily') start.setDate(now.getDate() - 1);
+    else if (period === 'weekly') start.setDate(now.getDate() - 7);
+    else start.setMonth(now.getMonth() - 1);
+    return { start: start.toISOString(), end: now.toISOString() };
+}
+
 const SalesOverview: React.FC = () => {
     const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
-    const [data, setData] = useState<SalesData>({
-        total_orders: 0,
-        total_revenue: 0,
-        average_order_value: 0,
-        period: 'weekly'
-    });
-    const [loading, setLoading] = useState(false);
-
-    useEffect(() => {
-        fetchSalesData();
-    }, [period]);
-
-    const fetchSalesData = async () => {
-        try {
-            setLoading(true);
-            const { data: salesData, error } = await supabase
-                .rpc('get_sales_overview', { period });
-
-            if (error) throw error;
-
-            if (salesData) {
-                setData(salesData);
-            }
-        } catch (error) {
-            console.error('Error fetching sales data:', error);
-        } finally {
-            setLoading(false);
-        }
+    const range = useMemo(() => periodRange(period), [period]);
+    const metrics = useQuery(api.analytics.dashboardMetrics, range);
+    const loading = metrics === undefined;
+    const data: SalesData = {
+        total_orders: metrics?.total_orders ?? 0,
+        total_revenue: metrics?.total_revenue ?? 0,
+        average_order_value: metrics?.average_order_value ?? 0,
+        period,
     };
 
     const formatCurrency = (amount: number) => {

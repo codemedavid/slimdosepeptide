@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ArrowLeft, Package, CheckCircle, XCircle, Clock, Truck, AlertCircle, Search, RefreshCw, Eye, MessageCircle, Image as ImageIcon, Pencil, Save, X } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import { useMenu } from '../hooks/useMenu';
+import { useConvex, useMutation, useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 
 interface OrderItem {
   product_id: string;
@@ -50,40 +50,24 @@ interface OrdersManagerProps {
 }
 
 const OrdersManager: React.FC<OrdersManagerProps> = ({ onBack }) => {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
+  const ordersData = useQuery(api.orders.listAll);
+  const orders = (ordersData ?? []) as Order[];
+  const loading = ordersData === undefined;
+  const convex = useConvex();
+  const updateOrderStatus = useMutation(api.orders.updateStatus);
+  const updateOrderTracking = useMutation(api.orders.updateTracking);
+  const updateOrderDetails = useMutation(api.orders.updateDetails);
+  const adjustProductStock = useMutation(api.products.adjustStock);
+  const adjustVariationStock = useMutation(api.productVariations.adjustStock);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const { refreshProducts } = useMenu();
-
-  useEffect(() => {
-    loadOrders();
-  }, []);
-
-  const loadOrders = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setOrders(data || []);
-    } catch (error) {
-      console.error('Error loading orders:', error);
-      alert('Failed to load orders. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await loadOrders();
     setTimeout(() => setIsRefreshing(false), 500);
   };
 
@@ -95,32 +79,18 @@ const OrdersManager: React.FC<OrdersManagerProps> = ({ onBack }) => {
     try {
       setIsProcessing(true);
 
-      // First, check if all items are still in stock
+      // Check stock for all items first
       for (const item of order.order_items) {
         if (item.variation_id) {
-          // Check variation stock
-          const { data: variation, error: varError } = await supabase
-            .from('product_variations')
-            .select('stock_quantity')
-            .eq('id', item.variation_id)
-            .single();
-
-          if (varError) throw varError;
-          if (!variation || variation.stock_quantity < item.quantity) {
-            alert(`Insufficient stock for ${item.product_name} ${item.variation_name || ''}. Available: ${variation?.stock_quantity || 0}, Required: ${item.quantity}`);
+          const variation = await convex.query(api.productVariations.getById, { id: item.variation_id });
+          if (!variation || (variation.stock_quantity ?? 0) < item.quantity) {
+            alert(`Insufficient stock for ${item.product_name} ${item.variation_name || ''}. Available: ${variation?.stock_quantity ?? 0}, Required: ${item.quantity}`);
             return;
           }
         } else {
-          // Check product stock
-          const { data: product, error: prodError } = await supabase
-            .from('products')
-            .select('stock_quantity')
-            .eq('id', item.product_id)
-            .single();
-
-          if (prodError) throw prodError;
-          if (!product || product.stock_quantity < item.quantity) {
-            alert(`Insufficient stock for ${item.product_name}. Available: ${product?.stock_quantity || 0}, Required: ${item.quantity}`);
+          const product = await convex.query(api.products.getById, { id: item.product_id });
+          if (!product || (product.stock_quantity ?? 0) < item.quantity) {
+            alert(`Insufficient stock for ${item.product_name}. Available: ${product?.stock_quantity ?? 0}, Required: ${item.quantity}`);
             return;
           }
         }
@@ -129,63 +99,26 @@ const OrdersManager: React.FC<OrdersManagerProps> = ({ onBack }) => {
       // Deduct stock for each item
       for (const item of order.order_items) {
         if (item.variation_id) {
-          // Deduct from variation - get current stock and update
-          const { data: variation, error: varError } = await supabase
-            .from('product_variations')
-            .select('stock_quantity')
-            .eq('id', item.variation_id)
-            .single();
-
-          if (varError) throw varError;
-
+          const variation = await convex.query(api.productVariations.getById, { id: item.variation_id });
           if (variation) {
-            const newStock = Math.max(0, variation.stock_quantity - item.quantity);
-            const { error: updateError } = await supabase
-              .from('product_variations')
-              .update({ stock_quantity: newStock })
-              .eq('id', item.variation_id);
-
-            if (updateError) throw updateError;
+            const newStock = Math.max(0, (variation.stock_quantity ?? 0) - item.quantity);
+            await adjustVariationStock({ id: item.variation_id, stock_quantity: newStock });
           }
         } else {
-          // Deduct from product - get current stock and update
-          const { data: product, error: prodError } = await supabase
-            .from('products')
-            .select('stock_quantity')
-            .eq('id', item.product_id)
-            .single();
-
-          if (prodError) throw prodError;
-
+          const product = await convex.query(api.products.getById, { id: item.product_id });
           if (product) {
-            const newStock = Math.max(0, product.stock_quantity - item.quantity);
-            const { error: updateError } = await supabase
-              .from('products')
-              .update({ stock_quantity: newStock })
-              .eq('id', item.product_id);
-
-            if (updateError) throw updateError;
+            const newStock = Math.max(0, (product.stock_quantity ?? 0) - item.quantity);
+            await adjustProductStock({ id: item.product_id, stock_quantity: newStock });
           }
         }
       }
 
-      // Update order status
-      const { error: updateError } = await supabase
-        .from('orders')
-        .update({
-          order_status: 'confirmed',
-          payment_status: 'paid',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', order.id);
+      await updateOrderStatus({
+        id: order.id,
+        order_status: 'confirmed',
+        payment_status: 'paid',
+      });
 
-      if (updateError) throw updateError;
-
-      // Refresh orders and products
-      await loadOrders();
-      await refreshProducts();
-
-      // Trigger custom event to refresh inventory sales data
       window.dispatchEvent(new CustomEvent('orderConfirmed'));
 
       alert(`Order confirmed! Stock has been deducted from inventory.`);
@@ -201,16 +134,7 @@ const OrdersManager: React.FC<OrdersManagerProps> = ({ onBack }) => {
   const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
     try {
       setIsProcessing(true);
-      const { error } = await supabase
-        .from('orders')
-        .update({
-          order_status: newStatus,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', orderId);
-
-      if (error) throw error;
-      await loadOrders();
+      await updateOrderStatus({ id: orderId, order_status: newStatus });
       if (selectedOrder?.id === orderId) {
         setSelectedOrder({ ...selectedOrder, order_status: newStatus });
       }
@@ -225,30 +149,17 @@ const OrdersManager: React.FC<OrdersManagerProps> = ({ onBack }) => {
   const handleSaveTracking = async (orderId: string, trackingNumber: string, shippingNote: string) => {
     try {
       setIsProcessing(true);
-      const { error } = await supabase
-        .from('orders')
-        .update({
-          tracking_number: trackingNumber || null,
-          shipping_note: shippingNote || null,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', orderId);
-
-      if (error) throw error;
-
-      // Update local state
-      const updatedOrders = orders.map(o =>
-        o.id === orderId
-          ? { ...o, tracking_number: trackingNumber || null, shipping_note: shippingNote || null }
-          : o
-      );
-      setOrders(updatedOrders);
+      await updateOrderTracking({
+        id: orderId,
+        tracking_number: trackingNumber || undefined,
+        shipping_note: shippingNote || undefined,
+      });
 
       if (selectedOrder?.id === orderId) {
         setSelectedOrder({
           ...selectedOrder,
           tracking_number: trackingNumber || null,
-          shipping_note: shippingNote || null
+          shipping_note: shippingNote || null,
         });
       }
 
@@ -264,16 +175,20 @@ const OrdersManager: React.FC<OrdersManagerProps> = ({ onBack }) => {
   const handleSaveOrder = async (orderId: string, updates: Partial<Order>) => {
     try {
       setIsProcessing(true);
-      const { error } = await supabase
-        .from('orders')
-        .update({
-          ...updates,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', orderId);
-
-      if (error) throw error;
-      await loadOrders();
+      await updateOrderDetails({
+        id: orderId,
+        customer_name: updates.customer_name,
+        customer_email: updates.customer_email,
+        customer_phone: updates.customer_phone,
+        contact_method: updates.contact_method ?? undefined,
+        shipping_address: updates.shipping_address,
+        shipping_city: updates.shipping_city,
+        shipping_state: updates.shipping_state,
+        shipping_zip_code: updates.shipping_zip_code,
+        shipping_country: updates.shipping_country ?? undefined,
+        shipping_barangay: updates.shipping_barangay ?? undefined,
+        notes: updates.notes ?? undefined,
+      });
 
       if (selectedOrder?.id === orderId) {
         setSelectedOrder({ ...selectedOrder, ...updates } as Order);

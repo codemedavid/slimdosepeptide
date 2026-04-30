@@ -182,4 +182,32 @@ export default defineSchema({
     .index("by_uuid", ["id"])
     .index("by_status", ["order_status"])
     .index("by_email", ["customer_email"]),
+
+  guide_topics: defineTable({
+    id: v.string(),
+    title: v.optional(v.string()),
+    preview: v.optional(v.string()),
+    content: v.optional(v.string()),
+    cover_image: v.optional(v.string()),
+    author: v.optional(v.string()),
+    published_date: v.optional(v.string()),
+    display_order: v.optional(v.number()),
+    is_enabled: v.optional(v.boolean()),
+    related_product_ids: v.optional(v.array(v.string())),
+    created_at: v.optional(v.string()),
+    updated_at: v.optional(v.string()),
+  }).index("by_uuid", ["id"]),
+
+  global_discounts: defineTable({
+    id: v.string(),
+    name: v.optional(v.string()),
+    discount_type: v.optional(v.string()),
+    discount_value: v.optional(v.string()),
+    active: v.optional(v.boolean()),
+    start_date: v.optional(v.string()),
+    end_date: v.optional(v.string()),
+    excluded_product_ids: v.optional(v.array(v.string())),
+    created_at: v.optional(v.string()),
+    updated_at: v.optional(v.string()),
+  }).index("by_uuid", ["id"]),
 });

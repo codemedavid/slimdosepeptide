@@ -3,7 +3,8 @@ import { ArrowLeft, ShieldCheck, Package, CreditCard, Sparkles, Heart, Copy, Che
 import type { CartItem } from '../types';
 import { usePaymentMethods } from '../hooks/usePaymentMethods';
 import { useShippingLocations } from '../hooks/useShippingLocations';
-import { supabase } from '../lib/supabase';
+import { useConvex, useMutation } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 import { useImageUpload } from '../hooks/useImageUpload';
 
 interface CheckoutProps {
@@ -51,6 +52,10 @@ const Checkout: React.FC<CheckoutProps> = ({ cartItems, totalPrice, onBack }) =>
   const [promoError, setPromoError] = useState('');
   const [promoSuccess, setPromoSuccess] = useState('');
 
+  const convex = useConvex();
+  const createOrder = useMutation(api.orders.create);
+  const incrementPromoUsage = useMutation(api.promoCodes.incrementUsage);
+
   React.useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [step]);
@@ -83,14 +88,9 @@ const Checkout: React.FC<CheckoutProps> = ({ cartItems, totalPrice, onBack }) =>
     setIsApplyingPromo(true);
 
     try {
-      const { data: promo, error } = await supabase
-        .from('promo_codes')
-        .select('*')
-        .eq('code', code)
-        .eq('active', true)
-        .single();
+      const promo = await convex.query(api.promoCodes.findByCode, { code });
 
-      if (error || !promo) {
+      if (!promo || !promo.active) {
         setPromoError('Invalid or inactive promo code');
         setIsApplyingPromo(false);
         return;
@@ -212,9 +212,9 @@ const Checkout: React.FC<CheckoutProps> = ({ cartItems, totalPrice, onBack }) =>
       }));
 
       // Save order to database
-      const { data: orderData, error: orderError } = await supabase
-        .from('orders')
-        .insert([{
+      let orderData: any;
+      try {
+        orderData = await createOrder({
           customer_name: fullName,
           customer_email: email,
           customer_phone: phone,
@@ -224,47 +224,32 @@ const Checkout: React.FC<CheckoutProps> = ({ cartItems, totalPrice, onBack }) =>
           shipping_state: state,
           shipping_zip_code: zipCode,
           order_items: orderItems,
-          total_price: Math.max(0, totalPrice - discountAmount), // Store subtotal minus discount (not including shipping)
+          total_price: Math.max(0, totalPrice - discountAmount),
           shipping_fee: shippingFee,
           shipping_location: shippingLocation,
-          payment_method_id: paymentMethod?.id || null,
-          payment_method_name: paymentMethod?.name || null,
-          payment_proof_url: paymentProofUrl,
-          contact_method: contactMethod || null,
-          notes: notes.trim() || null,
-          order_status: 'new',
-          payment_status: 'pending',
-          promo_code_id: appliedPromo?.id || null,
-          promo_code: appliedPromo?.code || null,
-          discount_applied: discountAmount
-        }])
-        .select()
-        .single();
-
-      if (orderError) {
+          payment_method_id: paymentMethod?.id || undefined,
+          payment_method_name: paymentMethod?.name || undefined,
+          payment_proof_url: paymentProofUrl ?? undefined,
+          contact_method: contactMethod || undefined,
+          notes: notes.trim() || undefined,
+          promo_code_id: appliedPromo?.id ?? null,
+          promo_code: appliedPromo?.code ?? null,
+          discount_applied: discountAmount,
+        });
+      } catch (orderError: any) {
         console.error('❌ Error saving order:', orderError);
-
-        // Provide helpful error message if table doesn't exist
-        let errorMessage = orderError.message;
-        if (orderError.message?.includes('Could not find the table') ||
-          orderError.message?.includes('relation "public.orders" does not exist') ||
-          orderError.message?.includes('schema cache')) {
-          errorMessage = `The orders table doesn't exist in the database. Please run the migration: supabase/migrations/20250117000000_ensure_orders_table.sql in your Supabase SQL Editor.`;
-        }
-
-        alert(`Failed to save order: ${errorMessage}\n\nPlease contact support if this issue persists.`);
+        alert(
+          `Failed to save order: ${orderError?.message ?? 'Unknown error'}\n\nPlease contact support if this issue persists.`,
+        );
         return;
       }
 
       // Update promo code usage count
       if (appliedPromo) {
-        const { error: promoUpdateError } = await supabase
-          .from('promo_codes')
-          .update({ usage_count: appliedPromo.usage_count + 1 })
-          .eq('id', appliedPromo.id);
-
-        if (promoUpdateError) {
-          console.error('Failed to update promo usage count:', promoUpdateError);
+        try {
+          await incrementPromoUsage({ id: appliedPromo.id });
+        } catch (err) {
+          console.error('Failed to update promo usage count:', err);
         }
       }
 

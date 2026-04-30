@@ -1,9 +1,10 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ArrowLeft, Package, TrendingUp, AlertTriangle, Search, Edit, Trash2, Plus, Download, RefreshCw, Layers } from 'lucide-react';
 import type { Product } from '../types';
 import { useMenu } from '../hooks/useMenu';
 import { useCategories } from '../hooks/useCategories';
-import { supabase } from '../lib/supabase';
+import { useMutation, useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 
 interface PeptideInventoryManagerProps {
   onBack: () => void;
@@ -12,43 +13,22 @@ interface PeptideInventoryManagerProps {
 const PeptideInventoryManager: React.FC<PeptideInventoryManagerProps> = ({ onBack }) => {
   const { products, loading, refreshProducts, deleteProduct, deleteVariation } = useMenu();
   const { categories } = useCategories();
+  const ordersData = useQuery(api.orders.listAll);
+  const adjustProductStock = useMutation(api.products.adjustStock);
+  const adjustVariationStock = useMutation(api.productVariations.adjustStock);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedFilter, setSelectedFilter] = useState<string>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [orders, setOrders] = useState<any[]>([]);
 
-  // Load confirmed orders for sales calculation
-  useEffect(() => {
-    loadOrders();
-
-    // Listen for order confirmation events to refresh sales data
-    const handleOrderConfirmed = () => {
-      loadOrders();
-    };
-
-    window.addEventListener('orderConfirmed', handleOrderConfirmed);
-
-    return () => {
-      window.removeEventListener('orderConfirmed', handleOrderConfirmed);
-    };
-  }, []);
-
-  const loadOrders = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select('total_price, shipping_fee, order_items, order_status')
-        .in('order_status', ['confirmed', 'processing', 'shipped', 'delivered'])
-        .eq('payment_status', 'paid');
-
-      if (error) throw error;
-      setOrders(data || []);
-    } catch (error) {
-      console.error('Error loading orders for sales:', error);
-      setOrders([]);
-    }
-  };
+  const orders = useMemo(() => {
+    return (ordersData ?? []).filter(
+      (o: any) =>
+        ['confirmed', 'processing', 'shipped', 'delivered'].includes(o.order_status) &&
+        o.payment_status === 'paid',
+    );
+  }, [ordersData]);
 
   // Calculate stats
   const stats = useMemo(() => {
@@ -162,31 +142,17 @@ const PeptideInventoryManager: React.FC<PeptideInventoryManagerProps> = ({ onBac
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await refreshProducts();
-    await loadOrders();
     setTimeout(() => setIsRefreshing(false), 500);
   };
 
   const handleUpdateStock = async (productId: string, variationId: string | null, newStock: number) => {
     try {
       if (variationId) {
-        // Update variation stock
-        const { error } = await supabase
-          .from('product_variations')
-          .update({ stock_quantity: newStock })
-          .eq('id', variationId);
-
-        if (error) throw error;
+        await adjustVariationStock({ id: variationId, stock_quantity: newStock });
       } else {
-        // Update product stock
-        const { error } = await supabase
-          .from('products')
-          .update({ stock_quantity: newStock })
-          .eq('id', productId);
-
-        if (error) throw error;
+        await adjustProductStock({ id: productId, stock_quantity: newStock });
       }
 
-      await refreshProducts();
       alert('Stock updated successfully!');
     } catch (error) {
       console.error('Error updating stock:', error);

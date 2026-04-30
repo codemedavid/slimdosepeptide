@@ -10,7 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.56.1",
     "convex": "^1.36.1",
     "lucide-react": "^0.344.0",
     "qrcode.react": "^4.2.0",

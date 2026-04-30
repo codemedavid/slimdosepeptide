@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Plus, Edit2, Trash2, Save, X, Shield, ExternalLink, Sparkles, ArrowLeft } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { useMutation, useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 import ImageUpload from './ImageUpload';
 
 interface COAManagerProps {
@@ -23,11 +24,25 @@ interface COAReport {
 }
 
 const COAManager: React.FC<COAManagerProps> = ({ onBack }) => {
-  const [coaReports, setCOAReports] = useState<COAReport[]>([]);
-  const [loading, setLoading] = useState(true);
+  const data = useQuery(api.coaReports.listAll);
+  const coaPageSetting = useQuery(api.siteSettings.getOne, { id: 'coa_page_enabled' });
+  const createReport = useMutation(api.coaReports.create);
+  const updateReport = useMutation(api.coaReports.update);
+  const removeReport = useMutation(api.coaReports.remove);
+  const upsertSetting = useMutation(api.siteSettings.upsert);
+
+  const coaReports = (data ?? []) as COAReport[];
+  const loading = data === undefined;
+  const settingValue = (coaPageSetting as any)?.value;
+  const coaPageEnabled =
+    coaPageSetting === undefined
+      ? true
+      : coaPageSetting === null || settingValue === undefined
+        ? true
+        : settingValue === 'true' || settingValue === true;
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
-  const [coaPageEnabled, setCoaPageEnabled] = useState<boolean>(true);
   const [formData, setFormData] = useState<Partial<COAReport>>({
     product_name: '',
     batch: 'Unknown',
@@ -42,109 +57,18 @@ const COAManager: React.FC<COAManagerProps> = ({ onBack }) => {
     laboratory: 'Janoshik + Chromate',
   });
 
-  useEffect(() => {
-    fetchCOAReports();
-    fetchCOAPageSetting();
-  }, []);
-
-  const fetchCOAPageSetting = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('site_settings')
-        .select('value')
-        .eq('id', 'coa_page_enabled')
-        .single();
-
-      if (error && error.code !== 'PGRST116') throw error;
-      setCoaPageEnabled(data?.value === 'true' || data?.value === true || !data);
-    } catch (error) {
-      console.error('Error fetching COA page setting:', error);
-      // Default to enabled if setting doesn't exist
-      setCoaPageEnabled(true);
-    }
-  };
-
   const toggleCOAPage = async (enabled: boolean) => {
     try {
-      // First, check if the setting exists
-      const { data: existing, error: checkError } = await supabase
-        .from('site_settings')
-        .select('id')
-        .eq('id', 'coa_page_enabled')
-        .single();
-
-      let error;
-
-      if (checkError && checkError.code === 'PGRST116') {
-        // Setting doesn't exist, insert it
-        const { error: insertError } = await supabase
-          .from('site_settings')
-          .insert({
-            id: 'coa_page_enabled',
-            value: enabled ? 'true' : 'false',
-            type: 'boolean',
-            description: 'Enable or disable the COA page on the website',
-            updated_at: new Date().toISOString()
-          });
-        error = insertError;
-      } else if (checkError) {
-        // Some other error checking
-        throw checkError;
-      } else {
-        // Setting exists, update it
-        const { error: updateError } = await supabase
-          .from('site_settings')
-          .update({
-            value: enabled ? 'true' : 'false',
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', 'coa_page_enabled');
-        error = updateError;
-      }
-
-      if (error) {
-        console.error('Error updating COA page setting:', error);
-        throw error;
-      }
-
-      setCoaPageEnabled(enabled);
+      await upsertSetting({
+        id: 'coa_page_enabled',
+        value: enabled ? 'true' : 'false',
+        type: 'boolean',
+        description: 'Enable or disable the COA page on the website',
+      });
       alert(enabled ? '✅ COA page is now visible on the website' : '❌ COA page is now hidden from the website');
     } catch (error: any) {
       console.error('Error updating COA page setting:', error);
-      const errorMessage = error?.message || 'Unknown error';
-      alert(`❌ Failed to update COA page setting: ${errorMessage}\n\nThis might be a permissions issue. Please check your database RLS policies.`);
-    }
-  };
-
-  const fetchCOAReports = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('coa_reports')
-        .select('*')
-        .order('test_date', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching COA reports:', error);
-
-        // Check if table doesn't exist
-        if (error.code === '42P01' || error.message?.includes('does not exist')) {
-          alert('❌ COA reports table not found. Please run the database migration to create the table.');
-        } else if (error.code === '42501' || error.message?.includes('permission')) {
-          alert('❌ Permission denied. Please check your database permissions.');
-        } else {
-          alert(`❌ Failed to load COA reports: ${error.message || 'Unknown error'}`);
-        }
-        throw error;
-      }
-
-      setCOAReports(data || []);
-    } catch (error) {
-      console.error('Error fetching COA reports:', error);
-      // Don't show alert here if we already showed it above
-      setCOAReports([]);
-    } finally {
-      setLoading(false);
+      alert(`❌ Failed to update COA page setting: ${error?.message ?? 'Unknown error'}`);
     }
   };
 
@@ -152,32 +76,35 @@ const COAManager: React.FC<COAManagerProps> = ({ onBack }) => {
     e.preventDefault();
 
     try {
-      if (editingId) {
-        // Update existing report
-        const { error } = await supabase
-          .from('coa_reports')
-          .update(formData)
-          .eq('id', editingId);
+      const payload = {
+        product_name: formData.product_name || '',
+        batch: formData.batch,
+        test_date: formData.test_date,
+        purity_percentage:
+          typeof formData.purity_percentage === 'number' ? formData.purity_percentage : null,
+        quantity: formData.quantity,
+        task_number: formData.task_number,
+        verification_key: formData.verification_key,
+        image_url: formData.image_url || null,
+        featured: formData.featured,
+        manufacturer: formData.manufacturer,
+        laboratory: formData.laboratory,
+      };
 
-        if (error) throw error;
+      if (editingId) {
+        await updateReport({ id: editingId, ...payload });
         alert('✅ COA report updated successfully!');
       } else {
-        // Create new report
-        const { error } = await supabase
-          .from('coa_reports')
-          .insert([formData]);
-
-        if (error) throw error;
+        await createReport(payload);
         alert('✅ COA report added successfully!');
       }
 
       setEditingId(null);
       setIsAdding(false);
       resetForm();
-      fetchCOAReports();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving COA report:', error);
-      alert('❌ Failed to save COA report');
+      alert(`❌ Failed to save COA report: ${error?.message ?? 'Unknown error'}`);
     }
   };
 
@@ -185,17 +112,11 @@ const COAManager: React.FC<COAManagerProps> = ({ onBack }) => {
     if (!confirm('Are you sure you want to delete this COA report?')) return;
 
     try {
-      const { error } = await supabase
-        .from('coa_reports')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+      await removeReport({ id });
       alert('✅ COA report deleted successfully!');
-      fetchCOAReports();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting COA report:', error);
-      alert('❌ Failed to delete COA report');
+      alert(`❌ Failed to delete COA report: ${error?.message ?? 'Unknown error'}`);
     }
   };
 

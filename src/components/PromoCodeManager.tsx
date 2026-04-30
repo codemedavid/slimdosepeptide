@@ -1,16 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import React, { useState } from 'react';
+import { useMutation, useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 import { PromoCode } from '../types';
 import { Plus, Search, Tag, Trash2, Edit2, CheckCircle, XCircle } from 'lucide-react';
 
 const PromoCodeManager: React.FC = () => {
-    const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
-    const [loading, setLoading] = useState(true);
+    const data = useQuery(api.promoCodes.listAll);
+    const promoCodes = (data ?? []) as PromoCode[];
+    const loading = data === undefined;
+    const createPromo = useMutation(api.promoCodes.create);
+    const updatePromo = useMutation(api.promoCodes.update);
+    const removePromo = useMutation(api.promoCodes.remove);
+    const setPromoActive = useMutation(api.promoCodes.setActive);
+
     const [searchQuery, setSearchQuery] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingCode, setEditingCode] = useState<PromoCode | null>(null);
 
-    // Form State
     const [formData, setFormData] = useState<Partial<PromoCode>>({
         code: '',
         discount_type: 'fixed',
@@ -20,79 +26,59 @@ const PromoCodeManager: React.FC = () => {
         active: true
     });
 
-    useEffect(() => {
-        fetchPromoCodes();
-    }, []);
-
-    const fetchPromoCodes = async () => {
-        setLoading(true);
-        const { data, error } = await supabase
-            .from('promo_codes')
-            .select('*')
-            .order('created_at', { ascending: false });
-
-        if (error) {
-            console.error('Error fetching promo codes:', error);
-        } else {
-            setPromoCodes((data as PromoCode[]) || []);
-        }
-        setLoading(false);
-    };
-
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            const dataToSave = {
-                ...formData,
-                code: formData.code?.toUpperCase(), // Ensure uppercase
-                updated_at: new Date().toISOString()
-            };
-
             if (editingCode) {
-                // Update
-                const { error } = await supabase
-                    .from('promo_codes')
-                    .update(dataToSave)
-                    .eq('id', editingCode.id);
-                if (error) throw error;
+                await updatePromo({
+                    id: editingCode.id,
+                    code: formData.code?.toUpperCase(),
+                    discount_type: formData.discount_type,
+                    discount_value: formData.discount_value,
+                    min_purchase_amount: formData.min_purchase_amount,
+                    max_discount_amount:
+                        formData.max_discount_amount === undefined ? undefined : (formData.max_discount_amount ?? null),
+                    start_date: formData.start_date ?? null,
+                    end_date: formData.end_date ?? null,
+                    usage_limit: formData.usage_limit ?? null,
+                    active: formData.active,
+                });
             } else {
-                // Create
-                const { error } = await supabase
-                    .from('promo_codes')
-                    .insert([dataToSave]);
-                if (error) throw error;
+                await createPromo({
+                    code: formData.code?.toUpperCase() ?? '',
+                    discount_type: formData.discount_type ?? 'fixed',
+                    discount_value: formData.discount_value ?? 0,
+                    min_purchase_amount: formData.min_purchase_amount ?? 0,
+                    max_discount_amount: formData.max_discount_amount ?? null,
+                    start_date: formData.start_date ?? null,
+                    end_date: formData.end_date ?? null,
+                    usage_limit: formData.usage_limit ?? null,
+                    active: formData.active ?? true,
+                });
             }
 
             setIsModalOpen(false);
             setEditingCode(null);
             resetForm();
-            fetchPromoCodes();
             alert('Promo code saved successfully!');
         } catch (error: any) {
             console.error('Error saving promo code:', error);
-            alert(`Error saving promo code: ${error.message}`);
+            alert(`Error saving promo code: ${error?.message ?? 'Unknown error'}`);
         }
     };
 
     const handleDelete = async (id: string) => {
         if (!confirm('Are you sure you want to delete this promo code?')) return;
         try {
-            const { error } = await supabase.from('promo_codes').delete().eq('id', id);
-            if (error) throw error;
-            fetchPromoCodes();
-        } catch (error: any) {
+            await removePromo({ id });
+        } catch {
             alert('Error deleting promo code');
         }
     };
 
     const toggleActive = async (id: string, currentStatus: boolean) => {
         try {
-            const { error } = await supabase
-                .from('promo_codes')
-                .update({ active: !currentStatus })
-                .eq('id', id);
-            if (error) throw error;
-            fetchPromoCodes();
+            await setPromoActive({ id, active: !currentStatus });
         } catch (error) {
             console.error('Error updating status:', error);
         }

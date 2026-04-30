@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { supabase } from '../../lib/supabase';
+import React from 'react';
+import { useQuery } from 'convex/react';
+import { api } from '../../../convex/_generated/api';
 import { ShoppingBag, Box, Clock } from 'lucide-react';
-import { RealtimePostgresInsertPayload } from '@supabase/supabase-js';
 
 interface RecentSale {
     id: string;
@@ -16,49 +16,9 @@ interface RecentSalesFeedProps {
 }
 
 const RecentSalesFeed: React.FC<RecentSalesFeedProps> = ({ limit = 5 }) => {
-    const [sales, setSales] = useState<RecentSale[]>([]);
-    const [loading, setLoading] = useState(true);
-
-    const fetchSales = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('orders')
-                .select('id, customer_name, total_price, created_at, order_items')
-                .order('created_at', { ascending: false })
-                .limit(limit);
-
-            if (error) throw error;
-            setSales(data || []);
-        } catch (error) {
-            console.error('Error fetching recent sales:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchSales();
-
-        // Subscribe to new orders
-        const channel = supabase
-            .channel('recent-sales-feed')
-            .on(
-                'postgres_changes',
-                { event: 'INSERT', schema: 'public', table: 'orders' },
-                (payload: RealtimePostgresInsertPayload<RecentSale>) => {
-                    // Verify it's a valid order payload
-                    const newOrder = payload.new as RecentSale;
-                    if (newOrder) {
-                        setSales((prev) => [newOrder, ...prev].slice(0, limit));
-                    }
-                }
-            )
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }, [limit]);
+    const data = useQuery(api.orders.listRecent, { limit });
+    const sales = (data ?? []) as RecentSale[];
+    const loading = data === undefined;
 
     const formatTimeAgo = (dateString: string) => {
         const date = new Date(dateString);

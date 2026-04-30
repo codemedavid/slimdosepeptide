@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Shield, Award, CheckCircle, X, ExternalLink, Download, Sparkles, ArrowLeft } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 import { useCOAPageSetting } from '../hooks/useCOAPageSetting';
 
 interface COAReport {
@@ -19,30 +20,10 @@ interface COAReport {
 
 const COA: React.FC = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [coaReports, setCOAReports] = useState<COAReport[]>([]);
-  const [loading, setLoading] = useState(true);
+  const data = useQuery(api.coaReports.listAll);
+  const coaReports = (data ?? []) as COAReport[];
+  const loading = data === undefined;
 
-  useEffect(() => {
-    fetchCOAReports();
-  }, []);
-
-  const fetchCOAReports = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('coa_reports')
-        .select('*')
-        .order('test_date', { ascending: false });
-
-      if (error) throw error;
-      setCOAReports(data || []);
-    } catch (error) {
-      console.error('Error fetching COA reports:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ... (inside component)
   const { coaPageEnabled, loading: settingLoading } = useCOAPageSetting();
 
   // ... (after loading check)

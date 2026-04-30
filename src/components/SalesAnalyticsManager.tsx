@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { useConvex } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 import {
     ChevronLeft,
     RefreshCw,
@@ -29,8 +30,10 @@ interface DashboardMetrics {
 
 interface ProductRanking {
     product_name: string;
-    units_sold: number;
+    units: number;
     revenue: number;
+    // legacy alias used by the old RPC; kept for downstream compatibility
+    units_sold?: number;
 }
 
 interface RecentSale {
@@ -64,6 +67,7 @@ const formatTimeAgo = (dateString: string) => {
 };
 
 const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({ onBack }) => {
+    const convex = useConvex();
     const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly' | 'all'>('all');
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -86,7 +90,6 @@ const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({ onBack })
             let previousEndDate = new Date();
 
             if (timeframe === 'all') {
-                // All time - use a very old date as start
                 startDate = new Date('2020-01-01');
                 previousStartDate = new Date('2019-01-01');
                 previousEndDate = new Date('2019-12-31');
@@ -116,20 +119,26 @@ const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({ onBack })
                 previousEndDate.setHours(23, 59, 59, 999);
             }
 
-            const [currentRes, prevRes, rankingsRes, salesRes] = await Promise.all([
-                supabase.rpc('get_dashboard_metrics', { date_start: startDate.toISOString(), date_end: now.toISOString() }),
-                supabase.rpc('get_dashboard_metrics', { date_start: previousStartDate.toISOString(), date_end: previousEndDate.toISOString() }),
-                supabase.rpc('get_product_rankings', { date_start: startDate.toISOString(), date_end: now.toISOString(), limit_count: 10 }),
-                supabase.from('orders').select('id, customer_name, total_price, created_at, order_items').order('created_at', { ascending: false }).limit(5)
+            const [current, previous, rankingsData, salesData] = await Promise.all([
+                convex.query(api.analytics.dashboardMetrics, { start: startDate.toISOString(), end: now.toISOString() }),
+                convex.query(api.analytics.dashboardMetrics, { start: previousStartDate.toISOString(), end: previousEndDate.toISOString() }),
+                convex.query(api.analytics.productRankings, { start: startDate.toISOString(), end: now.toISOString(), limit: 10 }),
+                convex.query(api.orders.listRecent, { limit: 5 }),
             ]);
 
             setMetrics({
-                current: currentRes.data || { total_orders: 0, total_revenue: 0, total_units: 0, average_order_value: 0 },
-                previous: prevRes.data
+                current: current ?? { total_orders: 0, total_revenue: 0, total_units: 0, average_order_value: 0 },
+                previous: previous ?? null,
             });
-            setRankings(rankingsRes.data || []);
-            setRecentSales(salesRes.data || []);
-
+            setRankings(
+                (rankingsData ?? []).map((r: any) => ({
+                    product_name: r.product_name,
+                    units: r.units,
+                    units_sold: r.units,
+                    revenue: r.revenue,
+                })),
+            );
+            setRecentSales(salesData ?? []);
         } catch (error) {
             console.error('Error fetching analytics:', error);
         } finally {
@@ -140,11 +149,6 @@ const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({ onBack })
 
     useEffect(() => {
         fetchData();
-        const channel = supabase
-            .channel('analytics-updates')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, () => setTimeout(() => fetchData(true), 1000))
-            .subscribe();
-        return () => { supabase.removeChannel(channel); };
     }, [timeframe]);
 
     const calculateTrend = (current: number, previous: number) => {
@@ -152,7 +156,7 @@ const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({ onBack })
         return ((current - previous) / previous) * 100;
     };
 
-    const sortedRankings = [...rankings].sort((a, b) => sortBy === 'units' ? b.units_sold - a.units_sold : b.revenue - a.revenue);
+    const sortedRankings = [...rankings].sort((a, b) => sortBy === 'units' ? b.units - a.units : b.revenue - a.revenue);
 
     const getItemSummary = (items: any[]) => {
         if (!items || items.length === 0) return 'No items';
@@ -273,7 +277,7 @@ const SalesAnalyticsManager: React.FC<SalesAnalyticsManagerProps> = ({ onBack })
                                                 <h4 className="font-semibold text-gray-900 truncate">{product.product_name}</h4>
                                                 {index === 0 && <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-orange-400 to-red-500 text-white text-[10px] font-bold rounded-full"><Flame className="w-2.5 h-2.5" />HOT</span>}
                                             </div>
-                                            <p className="text-xs text-gray-500">{product.units_sold} units • {formatCurrency(product.revenue)}</p>
+                                            <p className="text-xs text-gray-500">{product.units} units • {formatCurrency(product.revenue)}</p>
                                         </div>
                                         <div className="text-right">
                                             <div className="text-lg font-bold text-navy-900">{sortBy === 'units' ? product.units_sold : formatCurrency(product.revenue)}</div>

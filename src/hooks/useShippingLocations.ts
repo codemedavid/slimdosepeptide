@@ -1,126 +1,87 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { useMemo } from 'react';
+import { useMutation, useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 
 export interface ShippingLocation {
-    id: string;
-    name: string;
-    fee: number;
-    is_active: boolean;
-    order_index: number;
+  id: string;
+  name: string;
+  fee: number;
+  is_active: boolean;
+  order_index: number;
 }
 
-// Default shipping locations (fallback if database table doesn't exist)
 const defaultLocations: ShippingLocation[] = [
-    { id: 'LUZON', name: 'Luzon (J&T)', fee: 150, is_active: true, order_index: 1 },
-    { id: 'VISAYAS', name: 'Visayas (J&T)', fee: 120, is_active: true, order_index: 2 },
-    { id: 'MINDANAO', name: 'Mindanao (J&T)', fee: 90, is_active: true, order_index: 3 },
-    { id: 'MAXIM', name: 'Maxim Delivery (Booking fee paid by customer upon delivery)', fee: 0, is_active: true, order_index: 4 },
+  { id: 'LUZON', name: 'Luzon (J&T)', fee: 150, is_active: true, order_index: 1 },
+  { id: 'VISAYAS', name: 'Visayas (J&T)', fee: 120, is_active: true, order_index: 2 },
+  { id: 'MINDANAO', name: 'Mindanao (J&T)', fee: 90, is_active: true, order_index: 3 },
+  {
+    id: 'MAXIM',
+    name: 'Maxim Delivery (Booking fee paid by customer upon delivery)',
+    fee: 0,
+    is_active: true,
+    order_index: 4,
+  },
 ];
 
 export const useShippingLocations = () => {
-    const [locations, setLocations] = useState<ShippingLocation[]>(defaultLocations);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+  const data = useQuery(api.shippingLocations.listActive);
+  const loading = data === undefined;
 
-    const fetchLocations = async () => {
-        try {
-            setLoading(true);
-            const { data, error: fetchError } = await supabase
-                .from('shipping_locations')
-                .select('*')
-                .eq('is_active', true)
-                .order('order_index', { ascending: true });
+  const locations = useMemo<ShippingLocation[]>(() => {
+    if (!data || data.length === 0) return defaultLocations;
+    return data as ShippingLocation[];
+  }, [data]);
 
-            if (fetchError) {
-                console.warn('Shipping locations table not found, using defaults:', fetchError.message);
-                setLocations(defaultLocations);
-            } else if (data && data.length > 0) {
-                setLocations(data);
-            } else {
-                setLocations(defaultLocations);
-            }
-        } catch (err) {
-            console.error('Error fetching shipping locations:', err);
-            setLocations(defaultLocations);
-        } finally {
-            setLoading(false);
-        }
-    };
+  const getShippingFee = (locationId: string): number => {
+    const location = locations.find((loc) => loc.id === locationId);
+    return location ? location.fee : 0;
+  };
 
-    useEffect(() => {
-        fetchLocations();
-    }, []);
-
-    const getShippingFee = (locationId: string): number => {
-        const location = locations.find(loc => loc.id === locationId);
-        return location ? location.fee : 0;
-    };
-
-    return { locations, loading, error, getShippingFee, refetch: fetchLocations };
+  return { locations, loading, error: null, getShippingFee, refetch: () => Promise.resolve() };
 };
 
-// Admin hook with CRUD operations
 export const useShippingLocationsAdmin = () => {
-    const [locations, setLocations] = useState<ShippingLocation[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+  const data = useQuery(api.shippingLocations.listAll);
+  const createMutation = useMutation(api.shippingLocations.create);
+  const updateMutation = useMutation(api.shippingLocations.update);
+  const removeMutation = useMutation(api.shippingLocations.remove);
 
-    const fetchAllLocations = async () => {
-        try {
-            setLoading(true);
-            const { data, error: fetchError } = await supabase
-                .from('shipping_locations')
-                .select('*')
-                .order('order_index', { ascending: true });
+  const locations = useMemo(() => (data ?? []) as ShippingLocation[], [data]);
+  const loading = data === undefined;
 
-            if (fetchError) {
-                console.warn('Shipping locations table not found:', fetchError.message);
-                setLocations([]);
-                setError('Table not found. Please run the migration.');
-            } else {
-                setLocations(data || []);
-                setError(null);
-            }
-        } catch (err) {
-            console.error('Error fetching shipping locations:', err);
-            setError(err instanceof Error ? err.message : 'Unknown error');
-        } finally {
-            setLoading(false);
-        }
-    };
+  const updateLocation = async (id: string, updates: Partial<ShippingLocation>) => {
+    await updateMutation({
+      id,
+      name: updates.name,
+      fee: updates.fee,
+      is_active: updates.is_active,
+      order_index: updates.order_index,
+    });
+  };
 
-    const updateLocation = async (id: string, updates: Partial<ShippingLocation>) => {
-        const { error } = await supabase
-            .from('shipping_locations')
-            .update({ ...updates, updated_at: new Date().toISOString() })
-            .eq('id', id);
+  const addLocation = async (
+    location: Omit<ShippingLocation, 'order_index'> & { order_index?: number },
+  ) => {
+    await createMutation({
+      id: location.id,
+      name: location.name,
+      fee: location.fee,
+      is_active: location.is_active,
+      order_index: location.order_index ?? locations.length + 1,
+    });
+  };
 
-        if (error) throw error;
-        await fetchAllLocations();
-    };
+  const deleteLocation = async (id: string) => {
+    await removeMutation({ id });
+  };
 
-    const addLocation = async (location: Omit<ShippingLocation, 'order_index'> & { order_index?: number }) => {
-        const { error } = await supabase
-            .from('shipping_locations')
-            .insert([{ ...location, order_index: location.order_index || locations.length + 1 }]);
-
-        if (error) throw error;
-        await fetchAllLocations();
-    };
-
-    const deleteLocation = async (id: string) => {
-        const { error } = await supabase
-            .from('shipping_locations')
-            .delete()
-            .eq('id', id);
-
-        if (error) throw error;
-        await fetchAllLocations();
-    };
-
-    useEffect(() => {
-        fetchAllLocations();
-    }, []);
-
-    return { locations, loading, error, updateLocation, addLocation, deleteLocation, refetch: fetchAllLocations };
+  return {
+    locations,
+    loading,
+    error: null,
+    updateLocation,
+    addLocation,
+    deleteLocation,
+    refetch: () => Promise.resolve(),
+  };
 };
