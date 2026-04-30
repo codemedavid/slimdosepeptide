@@ -4,7 +4,11 @@ import { ConvexProvider, ConvexReactClient } from 'convex/react';
 import App from './App.tsx';
 import './index.css';
 
-const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
+const CONVEX_URL =
+  (import.meta.env.VITE_CONVEX_URL as string | undefined) ||
+  'https://blessed-cuttlefish-644.convex.cloud';
+
+const convex = new ConvexReactClient(CONVEX_URL);
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
