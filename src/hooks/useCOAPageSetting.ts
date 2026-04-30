@@ -8,9 +8,11 @@ export const useCOAPageSetting = () => {
   useEffect(() => {
     fetchCOAPageSetting();
     
-    // Subscribe to changes in site_settings
+    // Subscribe to changes in site_settings — use a unique channel name per
+    // hook instance, since this hook is mounted in multiple components and
+    // Supabase rejects re-adding callbacks to a channel after subscribe().
     const channel = supabase
-      .channel('coa-page-setting-changes')
+      .channel(`coa-page-setting-changes-${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         {
