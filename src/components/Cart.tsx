@@ -171,14 +171,23 @@ const Cart: React.FC<CartProps> = ({
                         </button>
                       </div>
 
-                      <div className="text-right">
-                        <div className="text-xl md:text-2xl font-bold text-black">
-                          ₱{(item.price * item.quantity).toLocaleString('en-PH', { minimumFractionDigits: 0 })}
-                        </div>
-                        <div className="text-[10px] md:text-xs text-gray-500">
-                          ₱{item.price.toLocaleString('en-PH', { minimumFractionDigits: 0 })} each
-                        </div>
-                      </div>
+                      {(() => {
+                        const itemPrice = typeof item.price === 'number'
+                          ? item.price
+                          : (item.variation
+                              ? (item.variation.discount_active && item.variation.discount_price ? item.variation.discount_price : item.variation.price)
+                              : (item.product.discount_active && item.product.discount_price ? item.product.discount_price : item.product.base_price)) ?? 0;
+                        return (
+                          <div className="text-right">
+                            <div className="text-xl md:text-2xl font-bold text-black">
+                              ₱{(itemPrice * item.quantity).toLocaleString('en-PH', { minimumFractionDigits: 0 })}
+                            </div>
+                            <div className="text-[10px] md:text-xs text-gray-500">
+                              ₱{itemPrice.toLocaleString('en-PH', { minimumFractionDigits: 0 })} each
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>

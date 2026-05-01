@@ -39,7 +39,11 @@ export function useGlobalDiscount() {
         .eq('active', true)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        // Table may not exist yet — fail silently
+        setGlobalDiscount(null);
+        return;
+      }
 
       const now = new Date();
       const activeDiscount = (data as GlobalDiscount[] | null)?.find(discount => {
@@ -49,8 +53,7 @@ export function useGlobalDiscount() {
       }) ?? null;
 
       setGlobalDiscount(activeDiscount);
-    } catch (err) {
-      console.error('Error fetching global discount:', err);
+    } catch {
       setGlobalDiscount(null);
     } finally {
       setLoading(false);

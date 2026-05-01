@@ -2,11 +2,22 @@ import { useState, useEffect, useRef } from 'react';
 import type { CartItem, Product, ProductVariation } from '../types';
 
 // Helper function to load cart from localStorage synchronously
+const resolveItemPrice = (item: CartItem): number => {
+  if (typeof item.price === 'number') return item.price;
+  if (item.variation) {
+    if (item.variation.discount_active && item.variation.discount_price) return item.variation.discount_price;
+    return item.variation.price ?? 0;
+  }
+  if (item.product.discount_active && item.product.discount_price) return item.product.discount_price;
+  return item.product.base_price ?? 0;
+};
+
 const loadCartFromStorage = (): CartItem[] => {
   try {
     const savedCart = localStorage.getItem('peptide_cart');
     if (savedCart) {
-      return JSON.parse(savedCart);
+      const parsed = JSON.parse(savedCart) as CartItem[];
+      return parsed.map(item => ({ ...item, price: resolveItemPrice(item) }));
     }
   } catch (error) {
     console.error('Error loading cart from localStorage:', error);
@@ -174,7 +185,7 @@ export function useCart() {
 
   const getTotalPrice = () => {
     return cartItems.reduce((total, item) => {
-      return total + (item.price * item.quantity);
+      return total + (resolveItemPrice(item) * item.quantity);
     }, 0);
   };
 

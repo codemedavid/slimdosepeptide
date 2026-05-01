@@ -297,6 +297,11 @@ const Checkout: React.FC<CheckoutProps> = ({ cartItems, totalPrice, onBack }) =>
 
       console.log('✅ Order saved to database:', orderData);
 
+      // Fire-and-forget Telegram notification to admin group
+      supabase.functions
+        .invoke('telegram-notify-order', { body: { order_id: orderData.id } })
+        .catch((err) => console.error('Telegram notify failed:', err));
+
       // Get current date and time
       const now = new Date();
       const dateTimeStamp = now.toLocaleString('en-PH', {
