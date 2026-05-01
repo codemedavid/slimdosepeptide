@@ -1,15 +1,11 @@
 // Supabase Edge Function: telegram-webhook
 // Receives Telegram updates (callback button presses) and updates order status.
-// Only Telegram user IDs in TELEGRAM_ADMIN_IDS may confirm/cancel orders.
+// Anyone in the chat can confirm/cancel — auth is via the Telegram secret header.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const TELEGRAM_BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')!;
 const TELEGRAM_WEBHOOK_SECRET = Deno.env.get('TELEGRAM_WEBHOOK_SECRET') || '';
-const TELEGRAM_ADMIN_IDS = (Deno.env.get('TELEGRAM_ADMIN_IDS') || '')
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean);
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
@@ -43,19 +39,9 @@ Deno.serve(async (req) => {
     return new Response('ok');
   }
 
-  const fromId = String(cb.from?.id ?? '');
   const data: string = cb.data || '';
   const chatId = cb.message?.chat?.id;
   const messageId = cb.message?.message_id;
-
-  if (TELEGRAM_ADMIN_IDS.length && !TELEGRAM_ADMIN_IDS.includes(fromId)) {
-    await tg('answerCallbackQuery', {
-      callback_query_id: cb.id,
-      text: 'You are not authorized to act on orders.',
-      show_alert: true,
-    });
-    return new Response('ok');
-  }
 
   const [action, orderId] = data.split(':');
   if (!orderId || (action !== 'confirm' && action !== 'cancel')) {
