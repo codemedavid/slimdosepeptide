@@ -218,7 +218,7 @@ const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product, onClos
                     </select>
                     {selectedVariation && selectedVariation.stock_quantity === 0 && (
                       <p className="text-xs text-red-600 mt-1.5 font-semibold">
-                        ⚠️ This size is currently out of stock. Please select another size.
+                        ⚠️ This product is currently out of stock. Please select another product.
                       </p>
                     )}
                   </div>
