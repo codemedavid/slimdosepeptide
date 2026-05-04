@@ -158,9 +158,12 @@ export const useCategories = () => {
   useEffect(() => {
     fetchCategories();
 
-    // Set up real-time subscription for category changes
+    // Set up real-time subscription for category changes.
+    // Unique channel name per mount avoids "cannot add postgres_changes
+    // callbacks after subscribe()" when React StrictMode double-mounts.
+    const channelName = `categories-changes-${Math.random().toString(36).slice(2)}`;
     const categoriesChannel = supabase
-      .channel('categories-changes')
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -170,7 +173,7 @@ export const useCategories = () => {
         },
         (payload) => {
           console.log('Category changed:', payload);
-          fetchCategories(); // Refetch categories when any change occurs
+          fetchCategories();
         }
       )
       .subscribe();
