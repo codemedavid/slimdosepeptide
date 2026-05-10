@@ -189,9 +189,22 @@ const AdminDashboard: React.FC = () => {
         return prepared;
       };
 
+      // Generate a URL-safe slug from a name. Required because products.slug is NOT NULL.
+      const slugify = (value: string): string => {
+        const base = (value || '')
+          .toLowerCase()
+          .normalize('NFKD')
+          .replace(/[^\w\s-]/g, '')
+          .trim()
+          .replace(/[\s_-]+/g, '-')
+          .replace(/^-+|-+$/g, '');
+        const suffix = Math.random().toString(36).slice(2, 8);
+        return `${base || 'product'}-${suffix}`;
+      };
+
       // Only send columns that actually exist in the `products` table
       const pickProductDbFields = (data: Partial<Product>) => {
-        const allowedKeys: (keyof Product)[] = [
+        const allowedKeys: (keyof Product | 'slug')[] = [
           'name',
           'description',
           'category',
@@ -208,6 +221,7 @@ const AdminDashboard: React.FC = () => {
           'featured',
           'image_url',
           'safety_sheet_url',
+          'slug',
         ];
 
         const dbPayload: Partial<Product> = {};
@@ -285,6 +299,7 @@ const AdminDashboard: React.FC = () => {
         const createPayload = {
           ...createData,
           image_url: formData.image_url !== undefined ? formData.image_url : null,
+          slug: slugify(formData.name || 'product'),
         };
 
         const preparedData = prepareData(createPayload);

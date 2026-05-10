@@ -26,6 +26,7 @@ export interface Product {
   // Images and metadata
   image_url: string | null;
   safety_sheet_url: string | null;
+  slug?: string;
 
   created_at: string;
   updated_at: string;
